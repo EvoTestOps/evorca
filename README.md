@@ -1,6 +1,6 @@
-<h3 align="center">
-evorca: A Self-Improving RCA Agent
-</h3>
+<h3 align="center">evorca</h3>
+
+<p align="center">A self-improving agent for autonomous incident investigation and root cause analysis.</p>
 
 <p align="center">
   <a href="https://github.com/EvoTestOps/evorca/actions/workflows/ci.yml">
@@ -11,7 +11,7 @@ evorca: A Self-Improving RCA Agent
   </a>
 </p>
 
-evorca is an open-source agent for production root cause analysis and long-running autonomous tasks in incident response. It gathers evidence from the systems you already run (logs, metrics, traces, deploys, and code changes), forms and tests root-cause hypotheses, and reports what it found together with the evidence behind each claim. It improves its own harness over time from the outcomes of past investigations.
+evorca is an open-source agent that investigates production incidents on its own and finds their root causes. It gathers evidence from the systems you already run (logs, metrics, traces, deploys, and code changes), forms and tests root-cause hypotheses, and reports what it found together with the evidence behind each claim. It gets better over time by learning from the outcomes of past investigations.
 
 > **Status:** early scaffold. Nothing is installable yet; the repository currently holds the workspace, tooling, and contribution process.
 
@@ -20,8 +20,8 @@ evorca is an open-source agent for production root cause analysis and long-runni
 - **Evidence over assertion:** every root-cause claim links to the observations that support it.
 - **Read-only by default:** investigations query production systems; they do not change them. Remediation is a separate action that a human approves.
 - **Telemetry is data, not instructions:** log lines, alerts, and tickets are untrusted input and never steer the agent.
-- **Reversible self-improvement:** harness updates (prompts, memories, skills, playbooks) are small, evidence-backed, versioned, and can be rolled back.
-- **Long-running by design:** investigations survive restarts and can run autonomously for hours.
+- **Reversible self-improvement:** updates to prompts, memories, skills, and playbooks are small, evidence-backed, versioned, and can be rolled back.
+- **Built for long investigations:** work survives restarts and can run unattended for hours.
 
 ## Development
 

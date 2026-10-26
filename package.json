@@ -2,7 +2,7 @@
   "name": "evorca",
   "version": "0.0.0",
   "private": true,
-  "description": "A self-improving RCA agent for production root cause analysis and long-running autonomous tasks",
+  "description": "A self-improving agent for autonomous incident investigation and root cause analysis.",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
