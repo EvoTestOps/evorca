@@ -4,7 +4,7 @@ evorca runs with access to production telemetry and, through approved actions, t
 
 ## Reporting a vulnerability
 
-Report vulnerabilities privately through GitHub's [private vulnerability reporting](https://github.com/EvoTestOps/evorca/security/advisories/new) (the repository's **Security** tab, then **Report a vulnerability**). Do not open a public Discussion, Issue, or pull request.
+Report vulnerabilities privately through GitHub's [private vulnerability reporting](https://github.com/EvoTestOps/evorca/security/advisories/new) (the repository's **Security** tab, then **Report a vulnerability**). Do not open a public Issue or pull request.
 
 Include the affected commit, a description of the impact, and steps to reproduce using synthetic data. Never include real credentials or production data.
 

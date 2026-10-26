@@ -54,7 +54,7 @@ packages/      libraries, named @evorca/<name>
 
 ## Contributing
 
-Contributions start in [GitHub Discussions](https://github.com/EvoTestOps/evorca/discussions); see [CONTRIBUTING.md](CONTRIBUTING.md).
+Contributions start in [GitHub Issues](https://github.com/EvoTestOps/evorca/issues); see [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Security
 
