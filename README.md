@@ -11,7 +11,11 @@
   </a>
 </p>
 
-evorca is an open-source agent that investigates production incidents on its own and finds their root causes. It gathers evidence from the systems you already run (logs, metrics, traces, deploys, and code changes), forms and tests root-cause hypotheses, and reports what it found together with the evidence behind each claim. It gets better over time by learning from the outcomes of past investigations.
+evorca aims to investigate production incidents on its own and find their root causes. Given an incident, it will gather evidence from the systems you already run (logs, metrics, traces, deploys, and code changes), form root-cause hypotheses and test them against that evidence, and report the most likely cause together with the observations that support it. It only reads from those systems; any remediation is left to a human. Over time, it learns from the outcomes of past investigations, so each one makes the next faster and more accurate.
+
+## Contributing
+
+Open an [Issue](https://github.com/EvoTestOps/evorca/issues) to start a conversation, and read [CONTRIBUTING.md](CONTRIBUTING.md) before working on code. Report security issues privately as described in [SECURITY.md](SECURITY.md).
 
 ## License
 
