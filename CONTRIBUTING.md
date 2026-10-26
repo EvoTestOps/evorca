@@ -22,6 +22,6 @@ evorca connects to production systems with an operator's credentials, and its fi
 
 If a maintainer has invited a pull request, keep the change focused on the accepted Issue and follow the repository's existing conventions. Add or update tests for behavioral changes, and avoid unrelated refactors or dependency changes.
 
-Every pull request carries a changeset: run `pnpm changeset` to describe the user-visible change, or `pnpm changeset --empty` if the change needs no release note (see [`.changeset/README.md`](.changeset/README.md)). Before opening the pull request, run `pnpm check` locally, which runs the same lint, typecheck, test, and build gates as CI, and describe the validation in the pull request. Setup and commands are documented in the [README](README.md).
+Every pull request carries a changeset: run `pnpm changeset` to describe the user-visible change, or `pnpm changeset --empty` if the change needs no release note (see [`.changeset/README.md`](.changeset/README.md)). Before opening the pull request, run `pnpm check` locally, which runs the same format, typecheck, test, and build gates as CI, and describe the validation in the pull request. Setup and commands are documented in the [README](README.md).
 
 Maintainers may close a pull request that changes scope, cannot be validated safely, or no longer fits the project roadmap.

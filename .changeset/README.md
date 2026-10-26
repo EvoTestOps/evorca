@@ -1,6 +1,6 @@
 # Changesets
 
-Release notes for evorca are recorded here as changesets: small Markdown files that each describe one change. At release time, `pnpm version-packages` applies them: it bumps package versions, writes each package's `CHANGELOG.md`, and deletes the consumed changesets.
+Release notes for evorca are recorded here as changesets: small Markdown files that each describe one change. At release time, `pnpm changeset version` applies them: it bumps package versions, writes each package's `CHANGELOG.md`, and deletes the consumed changesets.
 
 ## Adding a changeset
 

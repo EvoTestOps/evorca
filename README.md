@@ -25,7 +25,7 @@ evorca is an open-source agent that investigates production incidents on its own
 
 ## Development
 
-Requirements: Node.js 22.13+ and pnpm (the version is pinned in `package.json`; `corepack enable` picks it up).
+Requirements: Node.js 22.12+ and pnpm (the version is pinned in `package.json`; `corepack enable` picks it up).
 
 ```bash
 corepack enable
@@ -35,9 +35,8 @@ pnpm check
 
 | Command          | What it does                                              |
 | ---------------- | --------------------------------------------------------- |
-| `pnpm check`     | The merge gate: lint, typecheck, test, and build          |
-| `pnpm lint`      | ESLint (type-aware) and a Prettier format check           |
-| `pnpm lint:fix`  | Apply ESLint fixes and Prettier formatting                |
+| `pnpm check`     | The merge gate: format check, typecheck, test, and build  |
+| `pnpm format`    | Format every file with Prettier                           |
 | `pnpm typecheck` | `tsc --noEmit` in every package                           |
 | `pnpm test`      | Vitest in every package                                   |
 | `pnpm build`     | Build every package                                       |
