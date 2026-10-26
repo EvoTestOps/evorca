@@ -13,8 +13,6 @@
 
 evorca is an open-source agent that investigates production incidents on its own and finds their root causes. It gathers evidence from the systems you already run (logs, metrics, traces, deploys, and code changes), forms and tests root-cause hypotheses, and reports what it found together with the evidence behind each claim. It gets better over time by learning from the outcomes of past investigations.
 
-> **Status:** early scaffold. Nothing is installable yet; the repository currently holds the workspace, tooling, and contribution process.
-
 ## Design principles
 
 - **Evidence over assertion:** every root-cause claim links to the observations that support it.
