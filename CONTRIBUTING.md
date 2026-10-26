@@ -20,15 +20,8 @@ evorca connects to production systems with an operator's credentials, and its fi
 
 ## Preparing an Approved Pull Request
 
-If a maintainer has invited a pull request:
+If a maintainer has invited a pull request, keep the change focused on the accepted Issue and follow the repository's existing conventions. Add or update tests for behavioral changes, and avoid unrelated refactors or dependency changes.
 
-1. Keep the change focused on the accepted Issue.
-2. Follow the repository's existing conventions.
-3. Add or update tests for behavioral changes.
-4. Add a changeset with `pnpm changeset`, or `pnpm changeset --empty` if the change needs no release note. See [`.changeset/README.md`](.changeset/README.md).
-5. Run `pnpm check` locally and describe the validation in the pull request.
-6. Avoid unrelated refactors or dependency changes.
-
-Setup and commands are documented in the [README](README.md); `pnpm check` runs the same lint, typecheck, test, and build gates as CI.
+Every pull request carries a changeset: run `pnpm changeset` to describe the user-visible change, or `pnpm changeset --empty` if the change needs no release note (see [`.changeset/README.md`](.changeset/README.md)). Before opening the pull request, run `pnpm check` locally, which runs the same lint, typecheck, test, and build gates as CI, and describe the validation in the pull request. Setup and commands are documented in the [README](README.md).
 
 Maintainers may close a pull request that changes scope, cannot be validated safely, or no longer fits the project roadmap.
