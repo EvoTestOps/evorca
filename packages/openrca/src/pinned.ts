@@ -19,10 +19,9 @@ export const openRcaRepository = "https://github.com/microsoft/OpenRCA.git";
  */
 export const openRcaCommit = "2a481ae63cb045c3eadbeca9eddaa10ec1151979";
 
-/** A zip archive that a server offers for HTTP Range requests. */
+/** A zip archive that a server offers for HTTP Range requests. `bytes` is its size. */
 export type Archive = {
   readonly url: string;
-  /** The size of the archive in bytes. */
   readonly bytes: number;
 };
 

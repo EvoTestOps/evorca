@@ -7,7 +7,6 @@
  *
  * @module
  */
-export { fromOpenRcaDatetime, toOpenRcaDatetime } from "./datetime.js";
 export { formatPrediction, parsePrediction, writePredictions } from "./prediction.js";
 export { openRcaSystems, readTasks } from "./tasks.js";
 export type { OpenRcaSystem, OpenRcaTask, TaskIndex } from "./tasks.js";

@@ -1,11 +1,9 @@
 /**
  * Downloads OpenRCA's answer keys, `query.csv` and `record.csv`, from the
- * published dataset archives.
- *
- * The archives hold about 8.8 GB, almost all of it telemetry. fetchOpenRcaData
- * downloads only the two small files of each system and checks each against
- * its pinned SHA-256 before it writes the file. It checks and keeps a file that
- * is already on disk, so a second run downloads nothing.
+ * published dataset archives. The archives hold about 8.8 GB, almost all of it
+ * telemetry, so fetchOpenRcaData reads only these two files of each system and
+ * checks each against its pinned SHA-256 before it writes the file. It keeps a
+ * file that is already on disk and matches, so a second run downloads nothing.
  *
  * @module
  */
@@ -22,6 +20,7 @@ import {
 import type { OpenRcaSystem } from "../tasks.js";
 import { readRemoteZipEntry } from "./remote-zip.js";
 
+/** A file that fetchOpenRcaData checked. `fetched` is false for a file that was already on disk. */
 type FetchedFile = {
   readonly file: DataFile;
   readonly bytes: number;
@@ -30,21 +29,11 @@ type FetchedFile = {
 };
 
 /**
- * Makes sure that `query.csv` and `record.csv` of each system are in `dataDir`
- * and match their pinned hashes.
+ * Makes sure that `<dataDir>/<system>/query.csv` and `record.csv` exist and match
+ * their hashes, and returns one entry per file in the order of `systems`, with
+ * `query.csv` first. It writes each file under a temporary name and renames it,
+ * so an interrupted run never leaves a partial file under the final name.
  *
- * It writes each file to a temporary name and then renames it, so an
- * interrupted run never leaves a partial file under the final name.
- *
- * @param systems - The systems to fetch.
- * @param dataDir - The directory to write `<system>/query.csv` and
- *   `<system>/record.csv` to.
- * @param archives - The archive that holds the files, by archive name.
- *   Defaults to the published archives.
- * @param sha256 - The SHA-256 that each file must have. Defaults to the pinned
- *   hashes.
- * @returns One entry per file, in the order of `systems`, with `query.csv`
- *   before `record.csv`. `fetched` is false for a file that was already on disk.
  * @throws Error if a file on disk or a downloaded file does not match its hash,
  *   or if a download fails.
  */

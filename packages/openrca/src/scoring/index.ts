@@ -7,7 +7,7 @@
  *
  * @module
  */
-export { ensureOpenRca, evaluatorPython, scoreWithOfficialEvaluator } from "./evaluator.js";
+export { scoreWithOfficialEvaluator } from "./evaluator.js";
 export type { ScoredRow } from "./evaluator.js";
 export { summarize } from "./summary.js";
 export type { Accuracy, Difficulty, Summary } from "./summary.js";

@@ -9,11 +9,9 @@
 import { parse } from "csv-parse/sync";
 
 /**
- * Parses CSV text whose first row is a header.
+ * Parses CSV text into one record per data row, in file order, keyed by the column
+ * names in its first row, which must include every name in `columns`.
  *
- * @param text - The CSV text.
- * @param columns - The columns that the header must contain.
- * @returns One record per data row, in file order, keyed by column name.
  * @throws Error if the header lacks one of `columns` or the text is not valid CSV.
  */
 export function parseCsv<const C extends string>(

@@ -12,10 +12,9 @@ import type { UnixSeconds } from "@evorca/core";
 const utcOffsetSeconds = 8 * 60 * 60;
 
 /**
- * Formats a time as an OpenRCA datetime.
+ * Formats `t` as an OpenRCA datetime to the whole second, such as
+ * `2020-04-11 00:05:00`.
  *
- * @param t - The time.
- * @returns The datetime at UTC+8 to the whole second, such as `2020-04-11 00:05:00`.
  * @throws RangeError if `t` is NaN or outside the range of `Date`.
  */
 export function toOpenRcaDatetime(t: UnixSeconds): string {
@@ -23,22 +22,9 @@ export function toOpenRcaDatetime(t: UnixSeconds): string {
 }
 
 /**
- * Parses an OpenRCA datetime.
- *
- * @param s - A datetime such as `2020-04-11 00:05:00`, read as UTC+8.
- * @returns The time that `s` names.
- * @throws RangeError if `s` is not in the form `YYYY-MM-DD HH:MM:SS` or names a
- *   time that does not exist, such as `2020-02-30 00:00:00`.
- */
-export function fromOpenRcaDatetime(s: string): UnixSeconds {
-  const t = parseOpenRcaDatetime(s);
-  if (t === undefined) throw new RangeError(`Not an OpenRCA datetime: ${s}`);
-  return t;
-}
-
-/**
- * Parses an OpenRCA datetime like {@link fromOpenRcaDatetime}, but returns
- * `undefined` where that function throws.
+ * Parses an OpenRCA datetime such as `2020-04-11 00:05:00`. Returns undefined
+ * unless `s` has the form `YYYY-MM-DD HH:MM:SS` and names a time that exists,
+ * so `2020-02-30 00:00:00` gives undefined.
  */
 export function parseOpenRcaDatetime(s: string): UnixSeconds | undefined {
   const t = (Date.parse(`${s.replace(" ", "T")}Z`) / 1000 - utcOffsetSeconds) as UnixSeconds;

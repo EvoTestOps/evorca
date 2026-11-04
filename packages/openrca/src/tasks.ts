@@ -19,7 +19,7 @@ export const openRcaSystems = [
   "Market/cloudbed-2",
 ] as const;
 
-/** The name of one OpenRCA system. */
+/** The name of one OpenRCA system, such as `Market/cloudbed-1`. */
 export type OpenRcaSystem = (typeof openRcaSystems)[number];
 
 const taskIndices = ["task_1", "task_2", "task_3", "task_4", "task_5", "task_6", "task_7"] as const;
@@ -32,21 +32,21 @@ const taskIndices = ["task_1", "task_2", "task_3", "task_4", "task_5", "task_6",
  */
 export type TaskIndex = (typeof taskIndices)[number];
 
-/** One OpenRCA task, without its scoring points. */
+/**
+ * One OpenRCA task, without its scoring points. `row` is the zero-based row of
+ * the task in `query.csv`, and a prediction file answers the task on the same
+ * row. `instruction` tells the agent the time range and the number of failures.
+ */
 export type OpenRcaTask = {
   readonly system: OpenRcaSystem;
-  /** The zero-based row of the task in `query.csv`. A prediction file answers it on the same row. */
   readonly row: number;
   readonly taskIndex: TaskIndex;
-  /** The instruction for the agent. It states the time range and the number of failures. */
   readonly instruction: string;
 };
 
 /**
- * Parses a task index as OpenRCA writes it.
+ * Parses the text of a `task_index` field.
  *
- * @param value - The text of a `task_index` field.
- * @returns `value` as a {@link TaskIndex}.
  * @throws Error if `value` is not one of `task_1` to `task_7`.
  */
 export function parseTaskIndex(value: string): TaskIndex {
@@ -56,11 +56,8 @@ export function parseTaskIndex(value: string): TaskIndex {
 }
 
 /**
- * Reads the tasks of one system.
+ * Reads the tasks in `<dataDir>/<system>/query.csv`, one per row, in file order.
  *
- * @param system - The system to read.
- * @param dataDir - The directory that holds `<system>/query.csv`.
- * @returns One task per row of `query.csv`, in file order.
  * @throws Error if `query.csv` cannot be read, lacks the `task_index`,
  *   `instruction`, or `scoring_points` column, or holds an unknown task index.
  */

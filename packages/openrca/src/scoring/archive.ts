@@ -1,15 +1,10 @@
 /**
  * Checks that this package reproduces the scores in OpenRCA's archive of
- * RCA-Agent predictions.
- *
- * The OpenRCA checkout holds the predictions of its RCA-Agent and their scores
- * in `rca/archive/agent-<system>.csv`, with the `/` in a system name replaced
- * by `-`. The check scores each archive file twice with the official
- * evaluator. Stage 1 scores the predictions as published. Stage 2 scores them
+ * RCA-Agent predictions, `rca/archive/agent-<system>.csv` with `/` replaced by
+ * `-`. Stage 1 scores the archived predictions as published. Stage 2 scores them
  * after a round trip through `parsePrediction`, `formatPrediction`, and
  * `writePredictions`. A score matches when it equals the archived score rounded
- * to two decimals, because the evaluator rounds its scores and the archive does
- * not.
+ * to two decimals, because the evaluator rounds its scores and the archive does not.
  *
  * @module
  */
@@ -21,11 +16,13 @@ import { formatPrediction, parsePrediction, writePredictions } from "../predicti
 import { readTasks, type OpenRcaSystem } from "../tasks.js";
 import { ensureOpenRca, scoreWithOfficialEvaluator, type ScoredRow } from "./evaluator.js";
 
-/** A score that differs from the archived score. */
+/**
+ * A score that differs from the archived score. `archived` holds the archived
+ * prediction and its unrounded score, or is undefined if the archive has no
+ * such row. `prediction` is the prediction that the evaluator scored.
+ */
 export type Mismatch = ScoredRow & {
-  /** The archived prediction and its unrounded score, or undefined if the archive has no such row. */
   readonly archived: { readonly prediction: string; readonly score: number } | undefined;
-  /** The prediction that the evaluator scored. */
   readonly prediction: string | undefined;
 };
 
@@ -35,13 +32,11 @@ type Stage = {
 };
 
 /**
- * Scores the archived predictions of one system in both stages.
+ * Scores the archived predictions of `system` in both stages. Returns the number
+ * of tasks in `query.csv` and, for each stage, one score per task and the
+ * mismatches, both in row order.
  *
- * @param system - The system to check.
  * @param dataDir - The directory that holds `<system>/query.csv`.
- * @param cacheDir - The cache directory.
- * @returns The number of tasks in `query.csv`, and for each stage one score per
- *   task and the mismatches, both in row order.
  * @throws Error if the checkout, `query.csv`, or the evaluator fails.
  */
 export async function reproduceArchive(
