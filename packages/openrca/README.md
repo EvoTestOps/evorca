@@ -23,14 +23,14 @@ OpenRCA benchmark support for evorca. It reads [OpenRCA](https://github.com/micr
 
 - `openRcaSystems` lists the four systems, and `OpenRcaSystem` is the name of one.
 - `readTasks(system, dataDir)` returns the tasks in `<dataDir>/<system>/query.csv` as `OpenRcaTask` values, in file order. A task's `TaskIndex`, `task_1` to `task_7`, decides which root cause fields the answer needs.
-- `formatPrediction(diagnosis)` and `parsePrediction(raw)` convert between a `Diagnosis` and OpenRCA's prediction JSON.
-- `writePredictions(taskCount, diagnoses)` returns the prediction CSV for one system, with one row per task.
+- `formatPrediction(diagnosis)` and `parsePrediction(raw)` convert between a `Diagnosis` and OpenRCA's prediction JSON. `parsePrediction` returns `undefined` for text that is not a valid prediction, so only `{}` parses as no causes.
+- `writePredictions(tasks, diagnoses)` returns the prediction CSV for one system, with one row per task in the order of `tasks`.
 
 ### `@evorca/openrca/scoring`
 
 `src/scoring/index.ts` is the entry for a scorer. An agent runner never imports it.
 
-- `scoreWithOfficialEvaluator(predictionsCsvPath, system, dataDir, cacheDir)` scores a prediction CSV and returns one `ScoredRow` per task.
+- `scoreWithOfficialEvaluator({ predictionsPath, system, dataDir, cacheDir })` scores a prediction CSV and returns one `ScoredRow` per task.
 - `summarize(rows)` returns a `Summary` with the strict and partial `Accuracy` for each `Difficulty` and in total.
 
 ## Write predictions
@@ -47,7 +47,7 @@ const diagnoses = new Map<number, Diagnosis>();
 for (const task of tasks) {
   diagnoses.set(task.row, await investigate(task.instruction));
 }
-await writeFile("predictions.csv", writePredictions(tasks.length, diagnoses));
+await writeFile("predictions.csv", writePredictions(tasks, diagnoses));
 ```
 
 A task with no entry in `diagnoses` gets the empty prediction `{}`, which scores 0.
@@ -71,12 +71,12 @@ The command writes `data/openrca/<system>/query.csv` and `data/openrca/<system>/
 ```ts
 import { scoreWithOfficialEvaluator, summarize } from "@evorca/openrca/scoring";
 
-const rows = await scoreWithOfficialEvaluator(
-  "predictions.csv",
-  "Telecom",
-  "data/openrca",
-  ".cache",
-);
+const rows = await scoreWithOfficialEvaluator({
+  predictionsPath: "predictions.csv",
+  system: "Telecom",
+  dataDir: "data/openrca",
+  cacheDir: ".cache",
+});
 const { total } = summarize(rows);
 console.log(`strict ${total.strict}, partial ${total.partial}`);
 ```

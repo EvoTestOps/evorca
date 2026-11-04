@@ -1,11 +1,12 @@
-import type { Diagnosis, UnixSeconds } from "@evorca/core";
+import { unixSeconds, type Diagnosis } from "@evorca/core";
 import { parse } from "csv-parse/sync";
 import { describe, expect, it } from "vitest";
 import { formatPrediction, parsePrediction, writePredictions } from "./prediction.js";
+import type { OpenRcaTask } from "./tasks.js";
 
 describe("predictions", () => {
   const diagnosis: Diagnosis = [
-    { occurredAt: 1586534700 as UnixSeconds, component: "docker_003" },
+    { occurredAt: unixSeconds(1586534700), component: "docker_003" },
     { reason: "CPU fault" },
   ];
 
@@ -19,14 +20,18 @@ describe("predictions", () => {
     expect(parsePrediction(formatPrediction(diagnosis))).toEqual(diagnosis);
   });
 
+  it("parse an empty object as no causes", () => {
+    expect(parsePrediction("{}")).toEqual([]);
+  });
+
   it.each([
     "the root cause is docker_003",
     '{"1": {"root cause component": "docker_003"',
     '[{"root cause component": "docker_003"}]',
     '{"1": {"root cause component": 3}}',
     '{"1": {"root cause component": "docker_003", "confidence": "high"}}',
-  ])("parse malformed text %j as no causes", (raw) => {
-    expect(parsePrediction(raw)).toEqual([]);
+  ])("parse malformed text %j as undefined", (raw) => {
+    expect(parsePrediction(raw)).toBeUndefined();
   });
 
   it("keep a cause with an invalid datetime, without its datetime", () => {
@@ -38,11 +43,18 @@ describe("predictions", () => {
   });
 
   it("are written one row per task in order, empty where no diagnosis exists", () => {
+    const tasks: OpenRcaTask[] = [0, 1, 2].map((row) => ({
+      system: "Telecom",
+      row,
+      taskIndex: "task_3",
+      instruction: "Find the component.",
+    }));
     const csv = writePredictions(
-      3,
+      tasks,
       new Map([
         [2, [{ component: "db_007" }]],
         [0, [{ reason: "CPU fault" }]],
+        [3, [{ reason: "network delay" }]],
       ]),
     );
     const rows = parse<{ prediction: string }>(csv, { columns: true });

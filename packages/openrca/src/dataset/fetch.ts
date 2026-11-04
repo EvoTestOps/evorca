@@ -37,12 +37,17 @@ type FetchedFile = {
  * @throws Error if a file on disk or a downloaded file does not match its hash,
  *   or if a download fails.
  */
-export async function fetchOpenRcaData(
-  systems: readonly OpenRcaSystem[],
-  dataDir: string,
-  archives: Readonly<Record<keyof typeof driveArchives, Archive>> = driveArchives,
-  sha256: Readonly<Record<DataFile, string>> = dataFileSha256,
-): Promise<FetchedFile[]> {
+export async function fetchOpenRcaData({
+  systems,
+  dataDir,
+  archives = driveArchives,
+  sha256 = dataFileSha256,
+}: {
+  readonly systems: readonly OpenRcaSystem[];
+  readonly dataDir: string;
+  readonly archives?: Readonly<Record<keyof typeof driveArchives, Archive>>;
+  readonly sha256?: Readonly<Record<DataFile, string>>;
+}): Promise<FetchedFile[]> {
   const fetched: FetchedFile[] = [];
   for (const system of systems) {
     const archive = archives[archiveOf[system]];
@@ -60,8 +65,8 @@ async function ensureFile(
   dataDir: string,
 ): Promise<FetchedFile> {
   const path = join(dataDir, file);
-  const local = await readFile(path).catch((error: NodeJS.ErrnoException) => {
-    if (error.code === "ENOENT") return undefined;
+  const local = await readFile(path).catch((error: unknown) => {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") return undefined;
     throw error;
   });
   if (local !== undefined) {

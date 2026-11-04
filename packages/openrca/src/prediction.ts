@@ -11,6 +11,7 @@
 import type { Diagnosis, RootCause } from "@evorca/core";
 import { stringify } from "csv-stringify/sync";
 import { parseOpenRcaDatetime, toOpenRcaDatetime } from "./datetime.js";
+import type { OpenRcaTask } from "./tasks.js";
 
 const fields = {
   occurredAt: "root cause occurrence datetime",
@@ -40,21 +41,24 @@ export function formatPrediction(diagnosis: Diagnosis): string {
 
 /**
  * Parses prediction JSON, such as an agent's answer, into causes in key order.
- * Returns an empty diagnosis unless `raw` is a JSON object whose values are
- * objects with only the three OpenRCA fields, each a string. A cause keeps its
- * component and reason when its datetime is invalid, because the evaluator
- * scores each field on its own.
+ * Returns undefined unless `raw` is a JSON object whose values are objects with
+ * only the three OpenRCA fields, each a string, so only `{}` gives no causes. A
+ * cause keeps its component and reason when its datetime is invalid, because
+ * the evaluator scores each field on its own.
  */
-export function parsePrediction(raw: string): Diagnosis {
-  let prediction: unknown;
-  try {
-    prediction = JSON.parse(raw);
-  } catch {
-    return [];
-  }
-  if (!isRecord(prediction)) return [];
+export function parsePrediction(raw: string): Diagnosis | undefined {
+  const prediction = parseJson(raw);
+  if (!isRecord(prediction)) return undefined;
   const causes = Object.values(prediction).map(readCause);
-  return causes.every((cause) => cause !== undefined) ? causes : [];
+  return causes.every((cause) => cause !== undefined) ? causes : undefined;
+}
+
+function parseJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
 }
 
 function readCause(value: unknown): RootCause | undefined {
@@ -86,18 +90,18 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 /**
  * Writes the prediction CSV for one system, with a `prediction` header and one
- * row per task in row order. A task with no entry in `diagnoses` gets `{}`.
+ * row per task in the order of `tasks`. A task gets the diagnosis keyed by its
+ * `row`, or `{}` if `diagnoses` has none.
  *
- * @param taskCount - The number of rows in the system's `query.csv`, because the
- *   evaluator rejects a file with any other number of rows. Keys of `diagnoses`
- *   outside 0 to `taskCount - 1` have no effect.
+ * @param tasks - Every task of the system in row order, as `readTasks` returns
+ *   them, because the evaluator matches predictions to tasks by position.
  */
 export function writePredictions(
-  taskCount: number,
+  tasks: readonly OpenRcaTask[],
   diagnoses: ReadonlyMap<number, Diagnosis>,
 ): string {
-  const rows = Array.from({ length: taskCount }, (_, row) => ({
-    prediction: formatPrediction(diagnoses.get(row) ?? []),
+  const rows = tasks.map((task) => ({
+    prediction: formatPrediction(diagnoses.get(task.row) ?? []),
   }));
   return stringify(rows, { header: true, columns: ["prediction"] });
 }

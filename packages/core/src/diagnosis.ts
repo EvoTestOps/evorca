@@ -8,24 +8,35 @@
  */
 
 /**
- * Seconds since the Unix epoch, 1970-01-01 00:00:00 UTC.
- *
- * A plain `number` does not type-check as `UnixSeconds`, so a value in
- * milliseconds cannot pass for one. Cast to `UnixSeconds` only where the unit
- * is known, such as in a parser.
+ * Seconds since the Unix epoch, 1970-01-01 00:00:00 UTC. The brand stops a plain
+ * `number`, such as a time in milliseconds, from passing for one. Create one with
+ * {@link unixSeconds} or {@link isUnixSeconds}, never with a cast.
  */
 export type UnixSeconds = number & { readonly __brand: "UnixSeconds" };
 
+/** Returns whether `value` is finite, and so valid as {@link UnixSeconds}. */
+export function isUnixSeconds(value: number): value is UnixSeconds {
+  return Number.isFinite(value);
+}
+
 /**
- * One root cause of an incident. Every field is optional, because a task can
- * ask for any subset of them.
+ * Returns `value` as {@link UnixSeconds}.
+ *
+ * @throws RangeError if `value` is NaN or infinite.
+ */
+export function unixSeconds(value: number): UnixSeconds {
+  if (!isUnixSeconds(value)) throw new RangeError(`Not a time in Unix seconds: ${value}`);
+  return value;
+}
+
+/**
+ * One root cause of an incident. A task can ask for any subset of the fields,
+ * so each is optional. `component` is the name that the system uses, and
+ * `reason` says what went wrong, such as `high memory usage`.
  */
 export type RootCause = {
-  /** When the root cause occurred. */
   readonly occurredAt?: UnixSeconds;
-  /** The component where the root cause occurred, as the system names it. */
   readonly component?: string;
-  /** What went wrong, such as `high memory usage`. */
   readonly reason?: string;
 };
 

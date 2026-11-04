@@ -24,7 +24,7 @@ if (!requested.every(isSystem)) {
 }
 
 const systems = requested.length > 0 ? requested : openRcaSystems;
-for (const file of await fetchOpenRcaData(systems, dataDir)) {
+for (const file of await fetchOpenRcaData({ systems, dataDir })) {
   const status = file.fetched ? "fetched" : "present";
   console.log(`${status}  ${file.file}  ${file.bytes} bytes  sha256 ${file.sha256}`);
 }

@@ -76,22 +76,26 @@ export async function evaluatorPython(cacheDir: string): Promise<string> {
 }
 
 /**
- * Scores a prediction file with the official evaluator and returns one score
- * per task, in row order.
+ * Scores the prediction file at `predictionsPath` with the official evaluator
+ * and returns one score per task, in row order. The file needs a `prediction`
+ * column and one row per task in `<dataDir>/<system>/query.csv`, as
+ * `writePredictions` writes it. If it has a `row_id` column, the evaluator sorts
+ * the rows by it.
  *
- * @param predictionsCsvPath - A CSV file with a `prediction` column and one row
- *   per task of `system`, as `writePredictions` writes it. If the file has a
- *   `row_id` column, the evaluator sorts the rows by it.
- * @param dataDir - The directory that holds `<system>/query.csv`.
  * @throws Error with the evaluator's output if the evaluator fails, such as
  *   for a file with the wrong number of rows.
  */
-export async function scoreWithOfficialEvaluator(
-  predictionsCsvPath: string,
-  system: OpenRcaSystem,
-  dataDir: string,
-  cacheDir: string,
-): Promise<ScoredRow[]> {
+export async function scoreWithOfficialEvaluator({
+  predictionsPath,
+  system,
+  dataDir,
+  cacheDir,
+}: {
+  readonly predictionsPath: string;
+  readonly system: OpenRcaSystem;
+  readonly dataDir: string;
+  readonly cacheDir: string;
+}): Promise<ScoredRow[]> {
   const checkout = await ensureOpenRca(cacheDir);
   // The evaluator appends to a report that already exists, so each run writes to a new directory.
   const work = await mkdtemp(join(tmpdir(), "evorca-openrca-"));
@@ -103,25 +107,48 @@ export async function scoreWithOfficialEvaluator(
         "-m",
         "main.evaluate",
         "-p",
-        resolve(predictionsCsvPath),
+        resolve(predictionsPath),
         "-q",
         resolve(dataDir, system, "query.csv"),
         "-r",
         report,
       ],
       checkout,
-    ).catch((error: Error & { stdout: string }) => {
-      throw new Error(`${error.message}${error.stdout}`);
+    ).catch((error: unknown) => {
+      if (error instanceof Error && "stdout" in error && typeof error.stdout === "string") {
+        throw new Error(`${error.message}${error.stdout}`);
+      }
+      throw error;
     });
     const scored = parseCsv(await readFile(report, "utf8"), ["task_index", "score"]);
     return scored.map((record, row) => ({
       row,
       taskIndex: parseTaskIndex(record.task_index),
-      score: Number(record.score),
+      score: parseScore(record, `The evaluator's report on ${predictionsPath}`, row),
     }));
   } finally {
     await rm(work, { recursive: true, force: true });
   }
+}
+
+/**
+ * Parses the `score` field of `record`, the zero-based data `row` of the CSV
+ * file that `source` names.
+ *
+ * @throws Error naming `source` and `row` if the score is not a number from 0 to 1.
+ */
+export function parseScore(
+  record: { readonly score: string },
+  source: string,
+  row: number,
+): number {
+  const score = Number(record.score);
+  if (record.score.trim() === "" || Number.isNaN(score) || score < 0 || score > 1) {
+    throw new Error(
+      `${source}, row ${row}: score ${JSON.stringify(record.score)} is not a number from 0 to 1`,
+    );
+  }
+  return score;
 }
 
 function runPython(cacheDir: string, args: readonly string[], cwd?: string) {

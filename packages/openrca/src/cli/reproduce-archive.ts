@@ -32,7 +32,7 @@ const allRows: ScoredRow[] = [];
 let mismatches = 0;
 
 for (const system of openRcaSystems) {
-  const { tasks, published, roundTripped } = await reproduceArchive(system, dataDir, cacheDir);
+  const { tasks, published, roundTripped } = await reproduceArchive({ system, dataDir, cacheDir });
   console.log(
     `\n${system}: ${tasks} rows, stage 1 ${published.scores.length - published.mismatches.length}/${tasks} match, stage 2 ${roundTripped.scores.length - roundTripped.mismatches.length}/${tasks} match`,
   );

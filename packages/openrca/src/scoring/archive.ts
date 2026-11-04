@@ -14,15 +14,22 @@ import { join } from "node:path";
 import { parseCsv } from "../csv.js";
 import { formatPrediction, parsePrediction, writePredictions } from "../prediction.js";
 import { readTasks, type OpenRcaSystem } from "../tasks.js";
-import { ensureOpenRca, scoreWithOfficialEvaluator, type ScoredRow } from "./evaluator.js";
+import {
+  ensureOpenRca,
+  parseScore,
+  scoreWithOfficialEvaluator,
+  type ScoredRow,
+} from "./evaluator.js";
+
+/** One row of an archive file. Unlike the evaluator's scores, `score` is not rounded. */
+export type ArchiveRow = { readonly prediction: string; readonly score: number };
 
 /**
- * A score that differs from the archived score. `archived` holds the archived
- * prediction and its unrounded score, or is undefined if the archive has no
- * such row. `prediction` is the prediction that the evaluator scored.
+ * A score that differs from the archived score. `archived` is undefined if the
+ * archive has no such row. `prediction` is the prediction that the evaluator scored.
  */
 export type Mismatch = ScoredRow & {
-  readonly archived: { readonly prediction: string; readonly score: number } | undefined;
+  readonly archived: ArchiveRow | undefined;
   readonly prediction: string | undefined;
 };
 
@@ -32,30 +39,27 @@ type Stage = {
 };
 
 /**
- * Scores the archived predictions of `system` in both stages. Returns the number
- * of tasks in `query.csv` and, for each stage, one score per task and the
- * mismatches, both in row order.
+ * Scores the archived predictions of `system` in both stages against the tasks
+ * in `<dataDir>/<system>/query.csv`. Returns the number of tasks and, for each
+ * stage, one score per task and the mismatches, both in row order.
  *
- * @param dataDir - The directory that holds `<system>/query.csv`.
- * @throws Error if the checkout, `query.csv`, or the evaluator fails.
+ * @throws Error if the checkout, `query.csv`, the archive file, or the evaluator fails.
  */
-export async function reproduceArchive(
-  system: OpenRcaSystem,
-  dataDir: string,
-  cacheDir: string,
-): Promise<{ readonly tasks: number; readonly published: Stage; readonly roundTripped: Stage }> {
+export async function reproduceArchive({
+  system,
+  dataDir,
+  cacheDir,
+}: {
+  readonly system: OpenRcaSystem;
+  readonly dataDir: string;
+  readonly cacheDir: string;
+}): Promise<{ readonly tasks: number; readonly published: Stage; readonly roundTripped: Stage }> {
   const checkout = await ensureOpenRca(cacheDir);
   const name = system.replace("/", "-");
   const archivePath = join(checkout, "rca", "archive", `agent-${name}.csv`);
-  const archiveCsv = await readFile(archivePath, "utf8");
-  const archive = new Map(
-    parseCsv(archiveCsv, ["row_id", "prediction", "score"]).map((record) => [
-      Number(record.row_id),
-      { prediction: record.prediction, score: Number(record.score) },
-    ]),
-  );
+  const archive = await readArchive(archivePath);
   const diagnoses = new Map(
-    [...archive].map(([row, { prediction }]) => [row, parsePrediction(prediction)]),
+    [...archive].map(([row, { prediction }]) => [row, parsePrediction(prediction) ?? []]),
   );
   const tasks = await readTasks(system, dataDir);
   const stage = (
@@ -78,9 +82,19 @@ export async function reproduceArchive(
   const work = await mkdtemp(join(tmpdir(), "evorca-reproduce-"));
   try {
     const roundTripPath = join(work, `${name}.csv`);
-    await writeFile(roundTripPath, writePredictions(tasks.length, diagnoses));
-    const published = await scoreWithOfficialEvaluator(archivePath, system, dataDir, cacheDir);
-    const roundTripped = await scoreWithOfficialEvaluator(roundTripPath, system, dataDir, cacheDir);
+    await writeFile(roundTripPath, writePredictions(tasks, diagnoses));
+    const published = await scoreWithOfficialEvaluator({
+      predictionsPath: archivePath,
+      system,
+      dataDir,
+      cacheDir,
+    });
+    const roundTripped = await scoreWithOfficialEvaluator({
+      predictionsPath: roundTripPath,
+      system,
+      dataDir,
+      cacheDir,
+    });
     return {
       tasks: tasks.length,
       published: stage(published, (row) => archive.get(row)?.prediction),
@@ -89,4 +103,31 @@ export async function reproduceArchive(
   } finally {
     await rm(work, { recursive: true, force: true });
   }
+}
+
+/**
+ * Reads an archive file into its rows, keyed by `row_id`. The archive writes
+ * each `row_id` as a float, such as `3.0`.
+ *
+ * @throws Error naming the file and the zero-based data row if a `row_id` is
+ *   not a non-negative integer or a `score` is not a number from 0 to 1.
+ */
+export async function readArchive(path: string): Promise<ReadonlyMap<number, ArchiveRow>> {
+  const records = parseCsv(await readFile(path, "utf8"), ["row_id", "prediction", "score"]);
+  return new Map(
+    records.map((record, row) => [
+      parseRowId(record, path, row),
+      { prediction: record.prediction, score: parseScore(record, path, row) },
+    ]),
+  );
+}
+
+function parseRowId(record: { readonly row_id: string }, path: string, row: number): number {
+  const id = Number(record.row_id);
+  if (record.row_id.trim() === "" || !Number.isInteger(id) || id < 0) {
+    throw new Error(
+      `${path}, row ${row}: row_id ${JSON.stringify(record.row_id)} is not a non-negative integer`,
+    );
+  }
+  return id;
 }

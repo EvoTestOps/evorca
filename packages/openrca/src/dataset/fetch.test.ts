@@ -64,7 +64,9 @@ describe("fetchOpenRcaData", () => {
   it("extracts each file from its archive and checks its hash", async () => {
     const { dataDir, archives, hashes } = await setUp();
 
-    expect(await fetchOpenRcaData(["Telecom"], dataDir, archives, hashes)).toEqual([
+    expect(
+      await fetchOpenRcaData({ systems: ["Telecom"], dataDir, archives, sha256: hashes }),
+    ).toEqual([
       { file: "Telecom/query.csv", bytes: query.length, sha256: sha256(query), fetched: true },
       { file: "Telecom/record.csv", bytes: record.length, sha256: sha256(record), fetched: true },
     ]);
@@ -74,10 +76,15 @@ describe("fetchOpenRcaData", () => {
 
   it("keeps files that are already present without downloading them again", async () => {
     const { dataDir, server, archives, hashes } = await setUp();
-    await fetchOpenRcaData(["Telecom"], dataDir, archives, hashes);
+    await fetchOpenRcaData({ systems: ["Telecom"], dataDir, archives, sha256: hashes });
     const requests = server.requests();
 
-    const again = await fetchOpenRcaData(["Telecom"], dataDir, archives, hashes);
+    const again = await fetchOpenRcaData({
+      systems: ["Telecom"],
+      dataDir,
+      archives,
+      sha256: hashes,
+    });
 
     expect(again.map((file) => file.fetched)).toEqual([false, false]);
     expect(server.requests()).toBe(requests);
@@ -87,17 +94,17 @@ describe("fetchOpenRcaData", () => {
     const { dataDir, archives, hashes } = await setUp();
     const wrong = { ...hashes, "Telecom/query.csv": sha256(Buffer.from("other")) };
 
-    await expect(fetchOpenRcaData(["Telecom"], dataDir, archives, wrong)).rejects.toThrow(
-      "Telecom/query.csv",
-    );
+    await expect(
+      fetchOpenRcaData({ systems: ["Telecom"], dataDir, archives, sha256: wrong }),
+    ).rejects.toThrow("Telecom/query.csv");
     await expect(readFile(join(dataDir, "Telecom", "query.csv"))).rejects.toThrow("ENOENT");
   });
 
   it("rejects an archive whose size differs from the pinned size", async () => {
     const { dataDir, server, archives, hashes } = await setUp({ reportedTotal: 1_000_000 });
 
-    await expect(fetchOpenRcaData(["Telecom"], dataDir, archives, hashes)).rejects.toThrow(
-      server.url,
-    );
+    await expect(
+      fetchOpenRcaData({ systems: ["Telecom"], dataDir, archives, sha256: hashes }),
+    ).rejects.toThrow(server.url);
   });
 });
