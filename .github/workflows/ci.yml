@@ -24,12 +24,4 @@ jobs:
       - run: pnpm check
       - name: Require a changeset
         if: github.event_name == 'pull_request'
-        env:
-          BASE: origin/${{ github.base_ref }}
-        run: |
-          added=$(git diff --name-only --diff-filter=A "$BASE...HEAD" -- '.changeset/*.md')
-          if [ -z "$added" ]; then
-            echo "::error title=Missing changeset::Run pnpm changeset, or pnpm changeset --empty if this change needs no release note."
-            exit 1
-          fi
-          pnpm changeset status --since="$BASE"
+        run: scripts/check-changeset.sh "origin/$GITHUB_BASE_REF"
