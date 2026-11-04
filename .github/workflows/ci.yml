@@ -13,6 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v7
         with:
@@ -20,3 +22,14 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
+      - name: Require a changeset
+        if: github.event_name == 'pull_request'
+        env:
+          BASE: origin/${{ github.base_ref }}
+        run: |
+          added=$(git diff --name-only --diff-filter=A "$BASE...HEAD" -- '.changeset/*.md')
+          if [ -z "$added" ]; then
+            echo "::error title=Missing changeset::Run pnpm changeset, or pnpm changeset --empty if this change needs no release note."
+            exit 1
+          fi
+          pnpm changeset status --since="$BASE"
