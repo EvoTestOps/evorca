@@ -15,6 +15,7 @@ import { promisify } from "node:util";
 import { parseCsv } from "../csv.js";
 import { openRcaCommit, openRcaRepository } from "../pinned.js";
 import { parseTaskIndex, type OpenRcaSystem, type TaskIndex } from "../tasks.js";
+import { removeOnDispose } from "../temp.js";
 
 const run = promisify(execFile);
 
@@ -43,24 +44,12 @@ export async function ensureOpenRca(cacheDir: string): Promise<string> {
   if (head?.stdout.trim() === openRcaCommit) return checkout;
   await rm(checkout, { recursive: true, force: true });
   await mkdir(dirname(checkout), { recursive: true });
-  const staging = await mkdtemp(`${checkout}.staging-`);
-  try {
-    await run("git", ["-C", staging, "init", "-q"]);
-    await run("git", [
-      "-C",
-      staging,
-      "fetch",
-      "-q",
-      "--depth",
-      "1",
-      openRcaRepository,
-      openRcaCommit,
-    ]);
-    await run("git", ["-C", staging, "checkout", "-q", "FETCH_HEAD"]);
-    await rename(staging, checkout);
-  } finally {
-    await rm(staging, { recursive: true, force: true });
-  }
+  await using staging = removeOnDispose(await mkdtemp(`${checkout}.staging-`));
+  const git = (...args: string[]) => run("git", ["-C", staging.path, ...args]);
+  await git("init", "-q");
+  await git("fetch", "-q", "--depth", "1", openRcaRepository, openRcaCommit);
+  await git("checkout", "-q", "FETCH_HEAD");
+  await rename(staging.path, checkout);
   return checkout;
 }
 
@@ -98,37 +87,22 @@ export async function scoreWithOfficialEvaluator({
 }): Promise<ScoredRow[]> {
   const checkout = await ensureOpenRca(cacheDir);
   // The evaluator appends to a report that already exists, so each run writes to a new directory.
-  const work = await mkdtemp(join(tmpdir(), "evorca-openrca-"));
-  try {
-    const report = join(work, "report.csv");
-    await runPython(
-      cacheDir,
-      [
-        "-m",
-        "main.evaluate",
-        "-p",
-        resolve(predictionsPath),
-        "-q",
-        resolve(dataDir, system, "query.csv"),
-        "-r",
-        report,
-      ],
-      checkout,
-    ).catch((error: unknown) => {
-      if (error instanceof Error && "stdout" in error && typeof error.stdout === "string") {
-        throw new Error(`${error.message}${error.stdout}`);
-      }
-      throw error;
-    });
-    const scored = parseCsv(await readFile(report, "utf8"), ["task_index", "score"]);
-    return scored.map((record, row) => ({
-      row,
-      taskIndex: parseTaskIndex(record.task_index),
-      score: parseScore(record, `The evaluator's report on ${predictionsPath}`, row),
-    }));
-  } finally {
-    await rm(work, { recursive: true, force: true });
-  }
+  await using work = removeOnDispose(await mkdtemp(join(tmpdir(), "evorca-openrca-")));
+  const report = join(work.path, "report.csv");
+  const query = resolve(dataDir, system, "query.csv");
+  const args = ["-m", "main.evaluate", "-p", resolve(predictionsPath), "-q", query, "-r", report];
+  await runPython(cacheDir, args, checkout).catch((error: unknown) => {
+    if (error instanceof Error && "stdout" in error && typeof error.stdout === "string") {
+      throw new Error(`${error.message}${error.stdout}`);
+    }
+    throw error;
+  });
+  const scored = parseCsv(await readFile(report, "utf8"), ["task_index", "score"]);
+  return scored.map((record, row) => ({
+    row,
+    taskIndex: parseTaskIndex(record.task_index),
+    score: parseScore(record, `The evaluator's report on ${predictionsPath}`, row),
+  }));
 }
 
 /**
