@@ -1,0 +1,20 @@
+{
+  "name": "@evorca/openrca",
+  "version": "0.0.0",
+  "private": true,
+  "description": "OpenRCA benchmark support for evorca.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@evorca/core": "workspace:*",
+    "csv-parse": "^7.0.3",
+    "csv-stringify": "^6.9.0"
+  }
+}
