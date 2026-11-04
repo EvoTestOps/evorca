@@ -25,7 +25,6 @@ OpenRCA benchmark support for evorca. It reads [OpenRCA](https://github.com/micr
 - `readTasks(system, dataDir)` returns the tasks in `<dataDir>/<system>/query.csv` as `OpenRcaTask` values, in file order. A task's `TaskIndex`, `task_1` to `task_7`, decides which root cause fields the answer needs.
 - `formatPrediction(diagnosis)` and `parsePrediction(raw)` convert between a `Diagnosis` and OpenRCA's prediction JSON.
 - `writePredictions(taskCount, diagnoses)` returns the prediction CSV for one system, with one row per task.
-- `toOpenRcaDatetime(t)` and `fromOpenRcaDatetime(s)` convert between `UnixSeconds` and OpenRCA datetimes.
 
 ### `@evorca/openrca/scoring`
 
@@ -33,8 +32,6 @@ OpenRCA benchmark support for evorca. It reads [OpenRCA](https://github.com/micr
 
 - `scoreWithOfficialEvaluator(predictionsCsvPath, system, dataDir, cacheDir)` scores a prediction CSV and returns one `ScoredRow` per task.
 - `summarize(rows)` returns a `Summary` with the strict and partial `Accuracy` for each `Difficulty` and in total.
-- `ensureOpenRca(cacheDir)` checks out the pinned OpenRCA commit and returns its path.
-- `evaluatorPython(cacheDir)` returns the version of the Python that runs the evaluator.
 
 ## Write predictions
 

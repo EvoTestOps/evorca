@@ -1,26 +1,25 @@
 /**
- * Summarizes evaluator scores as OpenRCA's accuracy metrics.
- *
- * OpenRCA reports two accuracies per difficulty. Strict accuracy is the share
- * of tasks with a score of 1, and partial accuracy is the mean score. As in
- * OpenRCA's `main/evaluate.py`, `task_1` to `task_3` are easy, `task_4` to
- * `task_6` are middle, and `task_7` is hard.
+ * Summarizes evaluator scores as the two accuracies per difficulty that
+ * OpenRCA's `main/evaluate.py` reports.
  *
  * @module
  */
 import type { TaskIndex } from "../tasks.js";
 import type { ScoredRow } from "./evaluator.js";
 
-/** An OpenRCA difficulty level. */
+/**
+ * An OpenRCA difficulty. As in `main/evaluate.py`, `task_1` to `task_3` are easy,
+ * `task_4` to `task_6` are middle, and `task_7` is hard.
+ */
 export type Difficulty = "easy" | "middle" | "hard";
 
-/** The accuracy over a set of tasks. Both accuracies are 0 for an empty set. */
+/**
+ * The accuracy over a set of tasks. `strict` is the share of tasks with a score
+ * of 1, and `partial` is the mean score. Both are 0 for an empty set.
+ */
 export type Accuracy = {
-  /** The number of tasks. */
   readonly tasks: number;
-  /** The share of tasks with a score of 1, from 0 to 1. */
   readonly strict: number;
-  /** The mean score, from 0 to 1. */
   readonly partial: number;
 };
 
@@ -37,12 +36,7 @@ const difficulty: Record<TaskIndex, Difficulty> = {
   task_7: "hard",
 };
 
-/**
- * Computes OpenRCA's accuracy metrics.
- *
- * @param rows - The scores, in any order.
- * @returns The accuracy per difficulty and over all rows.
- */
+/** Computes the accuracy per difficulty and over all rows, which may come in any order. */
 export function summarize(rows: readonly ScoredRow[]): Summary {
   const accuracy = (scores: readonly number[]): Accuracy => ({
     tasks: scores.length,

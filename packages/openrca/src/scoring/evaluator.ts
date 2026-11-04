@@ -1,11 +1,8 @@
 /**
  * Scores predictions with OpenRCA's own evaluator, `main/evaluate.py`, at the
- * pinned commit.
- *
- * uv runs the evaluator in the Python environment that `evaluator/uv.lock`
- * pins. The first call clones OpenRCA into `<cacheDir>/openrca/<commit>/` and
- * creates the environment in `<cacheDir>/openrca/venv/`. Later calls reuse
- * both.
+ * pinned commit, in the Python environment that `evaluator/uv.lock` pins. The
+ * first call clones OpenRCA into `<cacheDir>/openrca/<commit>/` and creates the
+ * environment in `<cacheDir>/openrca/venv/`. Later calls reuse both.
  *
  * @module
  */
@@ -23,23 +20,21 @@ const run = promisify(execFile);
 
 const evaluatorProject = fileURLToPath(new URL("../../evaluator/", import.meta.url));
 
-/** The evaluator's score for one prediction. */
+/**
+ * One evaluator score. `row` is the zero-based row in `query.csv`, and `score`
+ * is the share of scoring points met, from 0 to 1, rounded to two decimals.
+ */
 export type ScoredRow = {
-  /** The zero-based row in `query.csv`. */
   readonly row: number;
   readonly taskIndex: TaskIndex;
-  /** The share of the task's scoring points that the prediction met, from 0 to 1, rounded to two decimals. */
   readonly score: number;
 };
 
 /**
- * Makes sure that the pinned OpenRCA commit is checked out in the cache.
+ * Checks out the pinned OpenRCA commit in the cache unless it is there, and
+ * returns the absolute path of the checkout. It clones into a staging directory
+ * and renames that into place, so an interrupted clone never passes for one.
  *
- * It clones into a staging directory and renames that into place, so an
- * interrupted clone never passes for a checkout.
- *
- * @param cacheDir - The cache directory.
- * @returns The absolute path of the checkout.
  * @throws Error if git fails, such as without network access.
  */
 export async function ensureOpenRca(cacheDir: string): Promise<string> {
@@ -70,11 +65,9 @@ export async function ensureOpenRca(cacheDir: string): Promise<string> {
 }
 
 /**
- * Reports the version of the Python that runs the evaluator. Creates the
- * Python environment first if it does not exist.
+ * Returns the evaluator's `python --version`, such as `Python 3.11.14`, and
+ * creates the Python environment first if it does not exist.
  *
- * @param cacheDir - The cache directory.
- * @returns The output of `python --version`, such as `Python 3.11.14`.
  * @throws Error if uv is not installed or cannot create the environment.
  */
 export async function evaluatorPython(cacheDir: string): Promise<string> {
@@ -83,15 +76,13 @@ export async function evaluatorPython(cacheDir: string): Promise<string> {
 }
 
 /**
- * Scores a prediction file with the official evaluator.
+ * Scores a prediction file with the official evaluator and returns one score
+ * per task, in row order.
  *
  * @param predictionsCsvPath - A CSV file with a `prediction` column and one row
- *   per task of `system`, such as `writePredictions` returns. If the file has a
+ *   per task of `system`, as `writePredictions` writes it. If the file has a
  *   `row_id` column, the evaluator sorts the rows by it.
- * @param system - The system that the predictions answer.
  * @param dataDir - The directory that holds `<system>/query.csv`.
- * @param cacheDir - The cache directory.
- * @returns One score per task, in row order.
  * @throws Error with the evaluator's output if the evaluator fails, such as
  *   for a file with the wrong number of rows.
  */
