@@ -54,7 +54,7 @@ A task with no entry in `diagnoses` gets the empty prediction `{}`, which scores
 
 ## Fetch the data
 
-OpenRCA publishes its dataset on Google Drive as three zip archives of about 3 GB each. `fetch-data` reads only `query.csv` and `record.csv` out of the archives, through HTTP Range requests, and checks each file against its SHA-256 in `src/pinned.ts` before it writes the file. `query.csv` holds the tasks and their scoring points. `record.csv` lists the failures behind them.
+OpenRCA publishes its dataset on Google Drive as three zip archives of about 3 GB each. `fetch-data` reads only `query.csv` and `record.csv` out of the archives, through HTTP Range requests, and checks each file against its SHA-256 in `src/pinned.ts` before it keeps the file. `query.csv` holds the tasks and their scoring points. `record.csv` lists the failures behind them.
 
 You need network access to drive.usercontent.google.com. From the repository root, run:
 

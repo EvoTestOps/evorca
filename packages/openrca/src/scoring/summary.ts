@@ -38,18 +38,18 @@ const difficulty: Record<TaskIndex, Difficulty> = {
 
 /** Computes the accuracy per difficulty and over all rows, which may come in any order. */
 export function summarize(rows: readonly ScoredRow[]): Summary {
-  const accuracy = (scores: readonly number[]): Accuracy => ({
-    tasks: scores.length,
-    strict: scores.length === 0 ? 0 : scores.filter((score) => score === 1).length / scores.length,
-    partial:
-      scores.length === 0 ? 0 : scores.reduce((sum, score) => sum + score, 0) / scores.length,
-  });
-  const scoresOf = (level: Difficulty) =>
-    rows.filter((row) => difficulty[row.taskIndex] === level).map((row) => row.score);
+  const byLevel = Object.groupBy(rows, (row) => difficulty[row.taskIndex]);
   return {
-    easy: accuracy(scoresOf("easy")),
-    middle: accuracy(scoresOf("middle")),
-    hard: accuracy(scoresOf("hard")),
-    total: accuracy(rows.map((row) => row.score)),
+    easy: accuracy(byLevel.easy ?? []),
+    middle: accuracy(byLevel.middle ?? []),
+    hard: accuracy(byLevel.hard ?? []),
+    total: accuracy(rows),
   };
+}
+
+function accuracy(rows: readonly ScoredRow[]): Accuracy {
+  if (rows.length === 0) return { tasks: 0, strict: 0, partial: 0 };
+  const perfect = rows.reduce((count, row) => (row.score === 1 ? count + 1 : count), 0);
+  const sum = rows.reduce((total, row) => total + row.score, 0);
+  return { tasks: rows.length, strict: perfect / rows.length, partial: sum / rows.length };
 }

@@ -1,11 +1,10 @@
 /**
  * Reads one file out of a zip archive on a web server without downloading the
- * whole archive.
- *
- * A zip archive ends with a directory of its entries, so a reader needs only
- * that directory and the entry it wants. HTTP Range requests fetch those parts.
- * Each request fetches at least 1 MiB, so the many small reads that yauzl makes
- * share one response.
+ * whole archive. A zip archive ends with a directory of its entries, so a reader
+ * needs only that directory and the entry it wants, which HTTP Range requests
+ * fetch. Reads of up to 1 MiB share one buffered response, so the many small
+ * reads that yauzl makes cost one request. A larger read streams from its own
+ * response, so memory use does not grow with the size of an entry.
  *
  * @module
  */
@@ -13,28 +12,30 @@ import { Readable } from "node:stream";
 import { buffer } from "node:stream/consumers";
 import yauzl from "yauzl";
 
+const windowBytes = 1024 * 1024;
+
 /**
- * Reads one entry of a zip archive over HTTP.
+ * Opens one entry of a zip archive over HTTP as a stream of its uncompressed
+ * contents.
  *
  * @param url - The archive's URL. Its server must answer Range requests with a
  *   `content-range` header.
  * @param bytes - The size of the archive. Every response must report this
  *   total, so a changed archive fails instead of returning other bytes.
- * @param fileName - The path of the entry inside the archive.
- * @returns The entry's uncompressed contents.
  * @throws Error if a response does not cover the requested range of a
- *   `bytes`-long file, or if the archive has no entry named `fileName`.
+ *   `bytes`-long file, or if the archive has no entry named `fileName`. The
+ *   stream fails in the same way for a response that it reads later.
  */
-export async function readRemoteZipEntry(
+export async function openRemoteZipEntry(
   url: string,
   bytes: number,
   fileName: string,
-): Promise<Buffer> {
+): Promise<Readable> {
   const zip = await yauzl.fromRandomAccessReaderPromise(new RemoteFile(url, bytes), bytes, {
     lazyEntries: true,
   });
   for await (const entry of zip.eachEntry()) {
-    if (entry.fileName === fileName) return buffer(await zip.openReadStreamPromise(entry));
+    if (entry.fileName === fileName) return zip.openReadStreamPromise(entry);
   }
   throw new Error(`${fileName} is not in ${url}`);
 }
@@ -55,18 +56,28 @@ class RemoteFile extends yauzl.RandomAccessReader {
   }
 
   async *#read(start: number, end: number) {
+    if (end - start > windowBytes) {
+      yield* await this.#fetch(start, end);
+      return;
+    }
     if (start < this.#start || end > this.#start + this.#window.length) {
-      const last = Math.min(this.size, Math.max(end, start + 1024 * 1024)) - 1;
-      const response = await fetch(this.url, { headers: { Range: `bytes=${start}-${last}` } });
-      const range = response.headers.get("content-range");
-      if (range !== `bytes ${start}-${last}/${this.size}`) {
-        throw new Error(
-          `${this.url} answered bytes ${start}-${last} with ${response.status} ${range}`,
-        );
-      }
+      this.#window = await buffer(
+        await this.#fetch(start, Math.min(this.size, start + windowBytes)),
+      );
       this.#start = start;
-      this.#window = Buffer.from(await response.arrayBuffer());
     }
     yield this.#window.subarray(start - this.#start, end - this.#start);
+  }
+
+  async #fetch(start: number, end: number): Promise<ReadableStream<Uint8Array>> {
+    const range = `${start}-${end - 1}`;
+    const response = await fetch(this.url, { headers: { Range: `bytes=${range}` } });
+    const contentRange = response.headers.get("content-range");
+    if (contentRange !== `bytes ${range}/${this.size}` || response.body === null) {
+      throw new Error(
+        `${this.url} answered bytes ${range} with ${response.status} ${contentRange}`,
+      );
+    }
+    return response.body;
   }
 }

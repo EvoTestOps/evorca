@@ -8,12 +8,14 @@
  *
  * @module
  */
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import type { Diagnosis } from "@evorca/core";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseCsv } from "../csv.js";
 import { formatPrediction, parsePrediction, writePredictions } from "../prediction.js";
 import { readTasks, type OpenRcaSystem } from "../tasks.js";
+import { removeOnDispose } from "../temp.js";
 import {
   ensureOpenRca,
   parseScore,
@@ -25,25 +27,28 @@ import {
 export type ArchiveRow = { readonly prediction: string; readonly score: number };
 
 /**
- * A score that differs from the archived score. `archived` is undefined if the
- * archive has no such row. `prediction` is the prediction that the evaluator scored.
+ * A score that differs from the archived score. `prediction` is what the evaluator
+ * scored, which is the archived prediction in stage 1 and its round trip in stage 2.
  */
 export type Mismatch = ScoredRow & {
-  readonly archived: ArchiveRow | undefined;
-  readonly prediction: string | undefined;
+  readonly stage: 1 | 2;
+  readonly archived: ArchiveRow;
+  readonly prediction: string;
 };
 
-type Stage = {
+/** One score per task and the mismatches, both in row order. */
+export type Stage = {
   readonly scores: readonly ScoredRow[];
   readonly mismatches: readonly Mismatch[];
 };
 
 /**
  * Scores the archived predictions of `system` in both stages against the tasks
- * in `<dataDir>/<system>/query.csv`. Returns the number of tasks and, for each
- * stage, one score per task and the mismatches, both in row order.
+ * in `<dataDir>/<system>/query.csv`, and returns the number of tasks with each
+ * stage's result.
  *
- * @throws Error if the checkout, `query.csv`, the archive file, or the evaluator fails.
+ * @throws Error if the checkout, `query.csv`, the archive file, or the evaluator
+ *   fails, or if the archive has no row for a task.
  */
 export async function reproduceArchive({
   system,
@@ -58,51 +63,22 @@ export async function reproduceArchive({
   const name = system.replace("/", "-");
   const archivePath = join(checkout, "rca", "archive", `agent-${name}.csv`);
   const archive = await readArchive(archivePath);
-  const diagnoses = new Map(
-    [...archive].map(([row, { prediction }]) => [row, parsePrediction(prediction) ?? []]),
-  );
   const tasks = await readTasks(system, dataDir);
-  const stage = (
-    scores: readonly ScoredRow[],
-    scoredPrediction: (row: number) => string | undefined,
-  ): Stage => ({
-    scores,
-    mismatches: scores
-      .filter(({ row, score }) => {
-        const archived = archive.get(row)?.score;
-        return archived === undefined || Math.round(archived * 100) / 100 !== score;
-      })
-      .map((scored) => ({
-        ...scored,
-        archived: archive.get(scored.row),
-        prediction: scoredPrediction(scored.row),
-      })),
-  });
-
-  const work = await mkdtemp(join(tmpdir(), "evorca-reproduce-"));
-  try {
-    const roundTripPath = join(work, `${name}.csv`);
-    await writeFile(roundTripPath, writePredictions(tasks, diagnoses));
-    const published = await scoreWithOfficialEvaluator({
-      predictionsPath: archivePath,
-      system,
-      dataDir,
-      cacheDir,
-    });
-    const roundTripped = await scoreWithOfficialEvaluator({
-      predictionsPath: roundTripPath,
-      system,
-      dataDir,
-      cacheDir,
-    });
-    return {
-      tasks: tasks.length,
-      published: stage(published, (row) => archive.get(row)?.prediction),
-      roundTripped: stage(roundTripped, (row) => formatPrediction(diagnoses.get(row) ?? [])),
-    };
-  } finally {
-    await rm(work, { recursive: true, force: true });
-  }
+  await using work = removeOnDispose(await mkdtemp(join(tmpdir(), "evorca-reproduce-")));
+  const roundTripPath = join(work.path, `${name}.csv`);
+  const diagnoses = new Map(
+    [...archive].map(([row, { prediction }]) => [row, roundTrip(prediction)]),
+  );
+  await writeFile(roundTripPath, writePredictions(tasks, diagnoses));
+  const score = (predictionsPath: string) =>
+    scoreWithOfficialEvaluator({ predictionsPath, system, dataDir, cacheDir });
+  const published = await score(archivePath);
+  const roundTripped = await score(roundTripPath);
+  return {
+    tasks: tasks.length,
+    published: { scores: published, mismatches: findMismatches(published, archive, 1) },
+    roundTripped: { scores: roundTripped, mismatches: findMismatches(roundTripped, archive, 2) },
+  };
 }
 
 /**
@@ -130,4 +106,24 @@ function parseRowId(record: { readonly row_id: string }, path: string, row: numb
     );
   }
   return id;
+}
+
+function findMismatches(
+  scores: readonly ScoredRow[],
+  archive: ReadonlyMap<number, ArchiveRow>,
+  stage: 1 | 2,
+): Mismatch[] {
+  return scores.flatMap((scored) => {
+    const archived = archive.get(scored.row);
+    if (archived === undefined) throw new Error(`The archive has no row_id ${scored.row}`);
+    if (Math.round(archived.score * 100) / 100 === scored.score) return [];
+    const prediction =
+      stage === 1 ? archived.prediction : formatPrediction(roundTrip(archived.prediction));
+    return [{ ...scored, stage, archived, prediction }];
+  });
+}
+
+// Text that is not a prediction round-trips to no causes, which writePredictions writes as `{}`.
+function roundTrip(prediction: string): Diagnosis {
+  return parsePrediction(prediction) ?? [];
 }
