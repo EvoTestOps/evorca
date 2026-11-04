@@ -2,7 +2,7 @@
 #
 # Fails unless the current branch adds a changeset since a base ref.
 #
-# Usage: scripts/check-changeset.sh [base-ref]
+# Usage: deployment/scripts/changeset.sh [base-ref]
 #
 # base-ref defaults to origin/main. CI passes the pull request's base branch.
 # Run `git fetch origin` before a local check so the base is current.
