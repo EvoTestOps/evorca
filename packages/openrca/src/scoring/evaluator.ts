@@ -1,0 +1,141 @@
+/**
+ * Scores predictions with OpenRCA's own evaluator, `main/evaluate.py`, at the
+ * pinned commit.
+ *
+ * uv runs the evaluator in the Python environment that `evaluator/uv.lock`
+ * pins. The first call clones OpenRCA into `<cacheDir>/openrca/<commit>/` and
+ * creates the environment in `<cacheDir>/openrca/venv/`. Later calls reuse
+ * both.
+ *
+ * @module
+ */
+import { execFile } from "node:child_process";
+import { mkdir, mkdtemp, readFile, rename, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
+import { parseCsv } from "../csv.js";
+import { openRcaCommit, openRcaRepository } from "../pinned.js";
+import { parseTaskIndex, type OpenRcaSystem, type TaskIndex } from "../tasks.js";
+
+const run = promisify(execFile);
+
+const evaluatorProject = fileURLToPath(new URL("../../evaluator/", import.meta.url));
+
+/** The evaluator's score for one prediction. */
+export type ScoredRow = {
+  /** The zero-based row in `query.csv`. */
+  readonly row: number;
+  readonly taskIndex: TaskIndex;
+  /** The share of the task's scoring points that the prediction met, from 0 to 1, rounded to two decimals. */
+  readonly score: number;
+};
+
+/**
+ * Makes sure that the pinned OpenRCA commit is checked out in the cache.
+ *
+ * It clones into a staging directory and renames that into place, so an
+ * interrupted clone never passes for a checkout.
+ *
+ * @param cacheDir - The cache directory.
+ * @returns The absolute path of the checkout.
+ * @throws Error if git fails, such as without network access.
+ */
+export async function ensureOpenRca(cacheDir: string): Promise<string> {
+  const checkout = resolve(cacheDir, "openrca", openRcaCommit);
+  const head = await run("git", ["-C", checkout, "rev-parse", "HEAD"]).catch(() => undefined);
+  if (head?.stdout.trim() === openRcaCommit) return checkout;
+  await rm(checkout, { recursive: true, force: true });
+  await mkdir(dirname(checkout), { recursive: true });
+  const staging = await mkdtemp(`${checkout}.staging-`);
+  try {
+    await run("git", ["-C", staging, "init", "-q"]);
+    await run("git", [
+      "-C",
+      staging,
+      "fetch",
+      "-q",
+      "--depth",
+      "1",
+      openRcaRepository,
+      openRcaCommit,
+    ]);
+    await run("git", ["-C", staging, "checkout", "-q", "FETCH_HEAD"]);
+    await rename(staging, checkout);
+  } finally {
+    await rm(staging, { recursive: true, force: true });
+  }
+  return checkout;
+}
+
+/**
+ * Reports the version of the Python that runs the evaluator. Creates the
+ * Python environment first if it does not exist.
+ *
+ * @param cacheDir - The cache directory.
+ * @returns The output of `python --version`, such as `Python 3.11.14`.
+ * @throws Error if uv is not installed or cannot create the environment.
+ */
+export async function evaluatorPython(cacheDir: string): Promise<string> {
+  const { stdout } = await runPython(cacheDir, ["--version"]);
+  return stdout.trim();
+}
+
+/**
+ * Scores a prediction file with the official evaluator.
+ *
+ * @param predictionsCsvPath - A CSV file with a `prediction` column and one row
+ *   per task of `system`, such as `writePredictions` returns. If the file has a
+ *   `row_id` column, the evaluator sorts the rows by it.
+ * @param system - The system that the predictions answer.
+ * @param dataDir - The directory that holds `<system>/query.csv`.
+ * @param cacheDir - The cache directory.
+ * @returns One score per task, in row order.
+ * @throws Error with the evaluator's output if the evaluator fails, such as
+ *   for a file with the wrong number of rows.
+ */
+export async function scoreWithOfficialEvaluator(
+  predictionsCsvPath: string,
+  system: OpenRcaSystem,
+  dataDir: string,
+  cacheDir: string,
+): Promise<ScoredRow[]> {
+  const checkout = await ensureOpenRca(cacheDir);
+  // The evaluator appends to a report that already exists, so each run writes to a new directory.
+  const work = await mkdtemp(join(tmpdir(), "evorca-openrca-"));
+  try {
+    const report = join(work, "report.csv");
+    await runPython(
+      cacheDir,
+      [
+        "-m",
+        "main.evaluate",
+        "-p",
+        resolve(predictionsCsvPath),
+        "-q",
+        resolve(dataDir, system, "query.csv"),
+        "-r",
+        report,
+      ],
+      checkout,
+    ).catch((error: Error & { stdout: string }) => {
+      throw new Error(`${error.message}${error.stdout}`);
+    });
+    const scored = parseCsv(await readFile(report, "utf8"), ["task_index", "score"]);
+    return scored.map((record, row) => ({
+      row,
+      taskIndex: parseTaskIndex(record.task_index),
+      score: Number(record.score),
+    }));
+  } finally {
+    await rm(work, { recursive: true, force: true });
+  }
+}
+
+function runPython(cacheDir: string, args: readonly string[], cwd?: string) {
+  return run("uv", ["run", "--frozen", "--project", evaluatorProject, "python", ...args], {
+    cwd,
+    env: { ...process.env, UV_PROJECT_ENVIRONMENT: resolve(cacheDir, "openrca", "venv") },
+  });
+}

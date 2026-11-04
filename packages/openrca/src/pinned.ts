@@ -1,13 +1,23 @@
 /**
- * Every external input that this package depends on, pinned to one version.
+ * Every external input that OpenRCA scoring depends on, pinned to one version.
  *
- * The inputs are the dataset archives on Google Drive and the SHA-256 of each
- * file this package reads from them. `fetchOpenRcaData` rejects a file whose
- * hash differs, so every fetch gives the same bytes.
+ * The inputs are the dataset archives on Google Drive, the SHA-256 of each file
+ * this package reads from them, and the OpenRCA commit whose evaluator scores
+ * predictions. A change to any of them can change every score, so change them
+ * only together with the expected results in the README.
  *
  * @module
  */
 import type { OpenRcaSystem } from "./tasks.js";
+
+/** OpenRCA's git repository. */
+export const openRcaRepository = "https://github.com/microsoft/OpenRCA.git";
+
+/**
+ * The OpenRCA commit whose `main/evaluate.py` scores predictions and whose
+ * `rca/archive/` holds the archived RCA-Agent predictions.
+ */
+export const openRcaCommit = "2a481ae63cb045c3eadbeca9eddaa10ec1151979";
 
 /** A zip archive that a server offers for HTTP Range requests. */
 export type Archive = {

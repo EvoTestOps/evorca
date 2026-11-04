@@ -1,17 +1,19 @@
 # @evorca/openrca
 
-OpenRCA benchmark support for evorca. It reads [OpenRCA](https://github.com/microsoft/OpenRCA) tasks, writes predictions in OpenRCA's format, and fetches the answer keys.
+OpenRCA benchmark support for evorca. It reads [OpenRCA](https://github.com/microsoft/OpenRCA) tasks, writes predictions in OpenRCA's format, fetches the answer keys, and scores predictions with the official OpenRCA evaluator.
 
 ## Scope
 
 - Reading the tasks in `query.csv` for the Bank, Telecom, Market/cloudbed-1, and Market/cloudbed-2 systems.
 - Converting a `Diagnosis` from `@evorca/core` to and from OpenRCA's prediction JSON. OpenRCA datetimes are wall-clock times at UTC+8.
 - Fetching `query.csv` and `record.csv` from the published dataset archives and checking each file against its SHA-256 in `src/pinned.ts`.
+- Scoring a prediction CSV with OpenRCA's own `main/evaluate.py` at a pinned commit, in the Python environment locked in `evaluator/uv.lock`.
 
 ## Non-goals
 
 - The logs, metrics, and traces in the OpenRCA dataset. `fetch-data` downloads only `query.csv` and `record.csv`.
 - Running an agent.
+- A second implementation of the evaluator. Every score comes from OpenRCA's own code.
 
 ## Public API
 
@@ -24,6 +26,15 @@ OpenRCA benchmark support for evorca. It reads [OpenRCA](https://github.com/micr
 - `formatPrediction(diagnosis)` and `parsePrediction(raw)` convert between a `Diagnosis` and OpenRCA's prediction JSON.
 - `writePredictions(taskCount, diagnoses)` returns the prediction CSV for one system, with one row per task.
 - `toOpenRcaDatetime(t)` and `fromOpenRcaDatetime(s)` convert between `UnixSeconds` and OpenRCA datetimes.
+
+### `@evorca/openrca/scoring`
+
+`src/scoring/index.ts` is the entry for a scorer. An agent runner never imports it.
+
+- `scoreWithOfficialEvaluator(predictionsCsvPath, system, dataDir, cacheDir)` scores a prediction CSV and returns one `ScoredRow` per task.
+- `summarize(rows)` returns a `Summary` with the strict and partial `Accuracy` for each `Difficulty` and in total.
+- `ensureOpenRca(cacheDir)` checks out the pinned OpenRCA commit and returns its path.
+- `evaluatorPython(cacheDir)` returns the version of the Python that runs the evaluator.
 
 ## Write predictions
 
@@ -55,3 +66,52 @@ pnpm --filter @evorca/openrca fetch-data
 ```
 
 The command writes `data/openrca/<system>/query.csv` and `data/openrca/<system>/record.csv` and prints one line per file. To fetch only some systems, name them, as in `pnpm --filter @evorca/openrca fetch-data Telecom`. A file that is already present and matches its hash stays as it is, so a second run downloads nothing. If a file on disk does not match, the command fails and names the file to delete.
+
+## Score predictions
+
+`scoreWithOfficialEvaluator` runs OpenRCA's `main/evaluate.py` at the commit in `src/pinned.ts`. The first call clones that commit into `<cacheDir>/openrca/` and creates the Python environment that `evaluator/uv.lock` pins, so you need git, [uv](https://docs.astral.sh/uv/), and network access to github.com. uv downloads Python 3.11 if you do not have it.
+
+```ts
+import { scoreWithOfficialEvaluator, summarize } from "@evorca/openrca/scoring";
+
+const rows = await scoreWithOfficialEvaluator(
+  "predictions.csv",
+  "Telecom",
+  "data/openrca",
+  ".cache",
+);
+const { total } = summarize(rows);
+console.log(`strict ${total.strict}, partial ${total.partial}`);
+```
+
+Strict accuracy is the share of tasks with a score of 1. Partial accuracy is the mean score.
+
+## Reproduce the archive scores
+
+OpenRCA publishes the predictions of its RCA-Agent in `rca/archive/`. `reproduce-archive` scores each system's archive file twice with the official evaluator. Stage 1 scores the predictions as published. Stage 2 scores them after a round trip through `parsePrediction`, `formatPrediction`, and `writePredictions`. In both stages, each row's score must equal the archived score rounded to two decimals, because the evaluator rounds its scores to two decimals. The command lists every mismatch and exits with code 1 if it finds one.
+
+You need:
+
+- Node 22.12 or later. `.nvmrc` pins Node 22.
+- pnpm, through `corepack enable`.
+- [uv](https://docs.astral.sh/uv/). uv downloads Python 3.11 and the packages locked in `evaluator/uv.lock`.
+- git.
+- Network access to github.com and drive.usercontent.google.com.
+
+From a fresh clone, run:
+
+```sh
+pnpm install
+pnpm --filter @evorca/openrca fetch-data
+pnpm --filter @evorca/openrca reproduce-archive
+```
+
+`fetch-data` writes to `data/openrca/`. `reproduce-archive` checks out OpenRCA and creates the Python environment in `.cache/openrca/`. Both commands skip work that a previous run finished. `reproduce-archive` prints the pinned inputs and the Node, uv, and Python versions first, then one block per system. The expected result is:
+
+| System            | Rows | Stage 1 matches | Stage 2 matches | Strict accuracy | Partial accuracy |
+| ----------------- | ---: | --------------: | --------------: | --------------: | ---------------: |
+| Bank              |  136 |             136 |             136 |          14.71% |           22.55% |
+| Telecom           |   51 |              51 |              51 |          23.53% |           28.08% |
+| Market/cloudbed-1 |   70 |              70 |              70 |           4.29% |           12.49% |
+| Market/cloudbed-2 |   78 |              78 |              78 |           3.85% |           12.82% |
+| All systems       |  335 |             335 |             335 |          11.34% |           19.02% |
