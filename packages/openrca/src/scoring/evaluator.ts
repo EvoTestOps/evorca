@@ -15,6 +15,7 @@ import { promisify } from "node:util";
 import { parseCsv } from "../csv.js";
 import { openRcaCommit, openRcaRepository } from "../pinned.js";
 import { parseTaskIndex, type OpenRcaSystem, type TaskIndex } from "../tasks.js";
+import { removeOnDispose } from "../temp.js";
 
 const run = promisify(execFile);
 
@@ -43,24 +44,12 @@ export async function ensureOpenRca(cacheDir: string): Promise<string> {
   if (head?.stdout.trim() === openRcaCommit) return checkout;
   await rm(checkout, { recursive: true, force: true });
   await mkdir(dirname(checkout), { recursive: true });
-  const staging = await mkdtemp(`${checkout}.staging-`);
-  try {
-    await run("git", ["-C", staging, "init", "-q"]);
-    await run("git", [
-      "-C",
-      staging,
-      "fetch",
-      "-q",
-      "--depth",
-      "1",
-      openRcaRepository,
-      openRcaCommit,
-    ]);
-    await run("git", ["-C", staging, "checkout", "-q", "FETCH_HEAD"]);
-    await rename(staging, checkout);
-  } finally {
-    await rm(staging, { recursive: true, force: true });
-  }
+  await using staging = removeOnDispose(await mkdtemp(`${checkout}.staging-`));
+  const git = (...args: string[]) => run("git", ["-C", staging.path, ...args]);
+  await git("init", "-q");
+  await git("fetch", "-q", "--depth", "1", openRcaRepository, openRcaCommit);
+  await git("checkout", "-q", "FETCH_HEAD");
+  await rename(staging.path, checkout);
   return checkout;
 }
 
@@ -76,52 +65,64 @@ export async function evaluatorPython(cacheDir: string): Promise<string> {
 }
 
 /**
- * Scores a prediction file with the official evaluator and returns one score
- * per task, in row order.
+ * Scores the prediction file at `predictionsPath` with the official evaluator
+ * and returns one score per task, in row order. The file needs a `prediction`
+ * column and one row per task in `<dataDir>/<system>/query.csv`, as
+ * `writePredictions` writes it. If it has a `row_id` column, the evaluator sorts
+ * the rows by it.
  *
- * @param predictionsCsvPath - A CSV file with a `prediction` column and one row
- *   per task of `system`, as `writePredictions` writes it. If the file has a
- *   `row_id` column, the evaluator sorts the rows by it.
- * @param dataDir - The directory that holds `<system>/query.csv`.
  * @throws Error with the evaluator's output if the evaluator fails, such as
  *   for a file with the wrong number of rows.
  */
-export async function scoreWithOfficialEvaluator(
-  predictionsCsvPath: string,
-  system: OpenRcaSystem,
-  dataDir: string,
-  cacheDir: string,
-): Promise<ScoredRow[]> {
+export async function scoreWithOfficialEvaluator({
+  predictionsPath,
+  system,
+  dataDir,
+  cacheDir,
+}: {
+  readonly predictionsPath: string;
+  readonly system: OpenRcaSystem;
+  readonly dataDir: string;
+  readonly cacheDir: string;
+}): Promise<ScoredRow[]> {
   const checkout = await ensureOpenRca(cacheDir);
   // The evaluator appends to a report that already exists, so each run writes to a new directory.
-  const work = await mkdtemp(join(tmpdir(), "evorca-openrca-"));
-  try {
-    const report = join(work, "report.csv");
-    await runPython(
-      cacheDir,
-      [
-        "-m",
-        "main.evaluate",
-        "-p",
-        resolve(predictionsCsvPath),
-        "-q",
-        resolve(dataDir, system, "query.csv"),
-        "-r",
-        report,
-      ],
-      checkout,
-    ).catch((error: Error & { stdout: string }) => {
+  await using work = removeOnDispose(await mkdtemp(join(tmpdir(), "evorca-openrca-")));
+  const report = join(work.path, "report.csv");
+  const query = resolve(dataDir, system, "query.csv");
+  const args = ["-m", "main.evaluate", "-p", resolve(predictionsPath), "-q", query, "-r", report];
+  await runPython(cacheDir, args, checkout).catch((error: unknown) => {
+    if (error instanceof Error && "stdout" in error && typeof error.stdout === "string") {
       throw new Error(`${error.message}${error.stdout}`);
-    });
-    const scored = parseCsv(await readFile(report, "utf8"), ["task_index", "score"]);
-    return scored.map((record, row) => ({
-      row,
-      taskIndex: parseTaskIndex(record.task_index),
-      score: Number(record.score),
-    }));
-  } finally {
-    await rm(work, { recursive: true, force: true });
+    }
+    throw error;
+  });
+  const scored = parseCsv(await readFile(report, "utf8"), ["task_index", "score"]);
+  return scored.map((record, row) => ({
+    row,
+    taskIndex: parseTaskIndex(record.task_index),
+    score: parseScore(record, `The evaluator's report on ${predictionsPath}`, row),
+  }));
+}
+
+/**
+ * Parses the `score` field of `record`, the zero-based data `row` of the CSV
+ * file that `source` names.
+ *
+ * @throws Error naming `source` and `row` if the score is not a number from 0 to 1.
+ */
+export function parseScore(
+  record: { readonly score: string },
+  source: string,
+  row: number,
+): number {
+  const score = Number(record.score);
+  if (record.score.trim() === "" || Number.isNaN(score) || score < 0 || score > 1) {
+    throw new Error(
+      `${source}, row ${row}: score ${JSON.stringify(record.score)} is not a number from 0 to 1`,
+    );
   }
+  return score;
 }
 
 function runPython(cacheDir: string, args: readonly string[], cwd?: string) {
