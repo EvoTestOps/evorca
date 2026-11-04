@@ -26,6 +26,18 @@ importers:
 
   packages/core: {}
 
+  packages/openrca:
+    dependencies:
+      '@evorca/core':
+        specifier: workspace:*
+        version: link:../core
+      csv-parse:
+        specifier: ^7.0.3
+        version: 7.0.3
+      csv-stringify:
+        specifier: ^6.9.0
+        version: 6.9.0
+
 packages:
 
   '@changesets/apply-release-plan@8.1.1':
@@ -256,6 +268,12 @@ packages:
   chai@6.3.0:
     resolution: {integrity: sha512-XWAtwJ6OHO+tj0EKCs0Y2UamnyOxseZWltU4x2U2wh8g4AigdjwvtUjvLP2tqkA/avxHEtzxNaqGq/YGNwckKg==}
     engines: {node: '>=18'}
+
+  csv-parse@7.0.3:
+    resolution: {integrity: sha512-YFd3QM/yo17vH91L1IOZuvl09zM0zEEtdfTcOCKWcMdM++MNaQSyp09slXyFCLaPXvHstQFx/xC8myiFHSMUvw==}
+
+  csv-stringify@6.9.0:
+    resolution: {integrity: sha512-6b3e29CILFfSQ2nDRuZMRROzQOpPuJ+s8zPB5H7eK5ncXBbFOyVuRLU5Sx/zAUmVri3Ly49GyC8NEme4SVSAbA==}
 
   detect-libc@2.1.2:
     resolution: {integrity: sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ==}
@@ -771,6 +789,10 @@ snapshots:
   cac@7.1.0: {}
 
   chai@6.3.0: {}
+
+  csv-parse@7.0.3: {}
+
+  csv-stringify@6.9.0: {}
 
   detect-libc@2.1.2: {}
 
