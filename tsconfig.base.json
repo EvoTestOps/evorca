@@ -3,7 +3,7 @@
     "target": "es2024",
     "module": "nodenext",
     "types": ["node"],
-    "declaration": true,
+    "noUncheckedIndexedAccess": true,
     "skipLibCheck": true
   }
 }
