@@ -24,4 +24,4 @@ jobs:
       - run: pnpm check
       - name: Require a changeset
         if: github.event_name == 'pull_request'
-        run: scripts/check-changeset.sh "origin/$GITHUB_BASE_REF"
+        run: deployment/scripts/changeset.sh "origin/$GITHUB_BASE_REF"
