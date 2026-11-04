@@ -42,7 +42,14 @@ export type OpenRcaTask = {
   readonly instruction: string;
 };
 
-function parseTaskIndex(value: string): TaskIndex {
+/**
+ * Parses a task index as OpenRCA writes it.
+ *
+ * @param value - The text of a `task_index` field.
+ * @returns `value` as a {@link TaskIndex}.
+ * @throws Error if `value` is not one of `task_1` to `task_7`.
+ */
+export function parseTaskIndex(value: string): TaskIndex {
   const taskIndex = taskIndices.find((candidate) => candidate === value);
   if (taskIndex === undefined) throw new Error(`Unknown OpenRCA task index: ${value}`);
   return taskIndex;

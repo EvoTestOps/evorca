@@ -3,7 +3,7 @@
  * writes predictions in OpenRCA's format.
  *
  * It exposes no scoring points, so an agent that imports it cannot read the
- * answers through it.
+ * answers through it. Scoring has its own entry, `@evorca/openrca/scoring`.
  *
  * @module
  */
