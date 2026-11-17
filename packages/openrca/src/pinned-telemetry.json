@@ -1,0 +1,650 @@
+{
+  "Bank/telemetry/2021_03_04/log/log_service.csv": {
+    "bytes": 214194991,
+    "sha256": "66e45f613e8a515eb7c6b4d6a1fdc59ed729c999ec190eef8bf842dffcd02e4d"
+  },
+  "Bank/telemetry/2021_03_04/metric/metric_app.csv": {
+    "bytes": 617331,
+    "sha256": "80932766feb1a7611a17ed27a8070b044f429b69138c1ab3cb2e501fa45300c1"
+  },
+  "Bank/telemetry/2021_03_04/metric/metric_container.csv": {
+    "bytes": 86066591,
+    "sha256": "5029de2cf5290101434059bbe06a31cd39c2b407d0125a46846000f3f72e791d"
+  },
+  "Bank/telemetry/2021_03_04/trace/trace_span.csv": {
+    "bytes": 1256254711,
+    "sha256": "b0babcbd67be0e68b7970151733cfa4d9e1ae60668e15a0f32281362a2a8f545"
+  },
+  "Bank/telemetry/2021_03_05/log/log_service.csv": {
+    "bytes": 76395542,
+    "sha256": "2aa44dad2b9a97f101b5d6a8e8cb3a81dd6358da54d3ea67e8126c41f7af8950"
+  },
+  "Bank/telemetry/2021_03_05/metric/metric_app.csv": {
+    "bytes": 278349,
+    "sha256": "30535e2f8dd8ead2b81ab3858cb77933e0035d1db5d7e637a206ff21ba711bc4"
+  },
+  "Bank/telemetry/2021_03_05/metric/metric_container.csv": {
+    "bytes": 85884730,
+    "sha256": "4c545d48f3ae4b728eecafc41fb9c5d44695d5f3fcfd1af62d785864a0907641"
+  },
+  "Bank/telemetry/2021_03_05/trace/trace_span.csv": {
+    "bytes": 561193657,
+    "sha256": "a3f9e9c8ef118b20c3ef2c0409970d108fb03432ded0c700159f467c50a83cae"
+  },
+  "Bank/telemetry/2021_03_06/log/log_service.csv": {
+    "bytes": 328804568,
+    "sha256": "d0e6f8b7595cf35f5581ffad647dff953bceaa8e7e1b2bb7b3b412b181d0888f"
+  },
+  "Bank/telemetry/2021_03_06/metric/metric_app.csv": {
+    "bytes": 639422,
+    "sha256": "883ec49b01c12a464064dc055e6ab7e0dfd2943d55f7f8b1d1fe512961969776"
+  },
+  "Bank/telemetry/2021_03_06/metric/metric_container.csv": {
+    "bytes": 84110809,
+    "sha256": "02990d27fa4680e9116ff3086e180beff919254031b7214c6c37d965eba55e41"
+  },
+  "Bank/telemetry/2021_03_06/trace/trace_span.csv": {
+    "bytes": 2632745307,
+    "sha256": "eb5b405a47b425b4629abab6f1a2bd4b296c01d6d4c487d45e5344ea755120bb"
+  },
+  "Bank/telemetry/2021_03_07/log/log_service.csv": {
+    "bytes": 416743389,
+    "sha256": "ff1f16010635cea3c1c98b5f2b4053f3755079604d3658e506281111d4939ffe"
+  },
+  "Bank/telemetry/2021_03_07/metric/metric_app.csv": {
+    "bytes": 639097,
+    "sha256": "fa12343359c84d96c51ccc4f896ec3cd1afa159e6ecd2a145f27ddbe4cfdb578"
+  },
+  "Bank/telemetry/2021_03_07/metric/metric_container.csv": {
+    "bytes": 84638758,
+    "sha256": "56e7b482592cec731f3a5b7c1ccbe2cef5876d5cab1a2950d8acda4a8a7adffc"
+  },
+  "Bank/telemetry/2021_03_07/trace/trace_span.csv": {
+    "bytes": 2474565687,
+    "sha256": "9d21307f9c37a9f82b2436b371a8985c8450011bbf2d9826bf48edcca66c3029"
+  },
+  "Bank/telemetry/2021_03_09/log/log_service.csv": {
+    "bytes": 375183054,
+    "sha256": "ddbce54377f1e3a8cc8aef3da48fbfcea9b09c845ca4f61116fc7980df379f23"
+  },
+  "Bank/telemetry/2021_03_09/metric/metric_app.csv": {
+    "bytes": 673884,
+    "sha256": "7f04d52a1892a04a44ba7ffda0dda6760b4107201bfb16c8fdaac724a9d69dd7"
+  },
+  "Bank/telemetry/2021_03_09/metric/metric_container.csv": {
+    "bytes": 83866542,
+    "sha256": "7bc517bc31904212e02c28cfefa06d4c01096017913463bfdae72035c5ab98ca"
+  },
+  "Bank/telemetry/2021_03_09/trace/trace_span.csv": {
+    "bytes": 2377970111,
+    "sha256": "a102bf1b4aaf7d1eb0c54d3f90a0dee516e6a74797b21f85740ceb5cee0cc050"
+  },
+  "Bank/telemetry/2021_03_10/log/log_service.csv": {
+    "bytes": 434785428,
+    "sha256": "60dcd8471c0fb4d7c70669f1805aa546f7c29e596392d72d8c7094e4a5b51d93"
+  },
+  "Bank/telemetry/2021_03_10/metric/metric_app.csv": {
+    "bytes": 639571,
+    "sha256": "83cdb6ca34b810ae0efe101a812708d9985094dc6386f0d60addd710728a55bb"
+  },
+  "Bank/telemetry/2021_03_10/metric/metric_container.csv": {
+    "bytes": 84793705,
+    "sha256": "a563dadccb4565fd2e262b37887fd5887f76d5af5bea34403f5006eea6bb4252"
+  },
+  "Bank/telemetry/2021_03_10/trace/trace_span.csv": {
+    "bytes": 2551857873,
+    "sha256": "be595a169ab49abe7cbad419f988c5a81e4581a3eccd7fb1e7be9aed49687a4e"
+  },
+  "Bank/telemetry/2021_03_12/log/log_service.csv": {
+    "bytes": 438163539,
+    "sha256": "f10ba58a06de8dacf9ac7f07b9f7f15ee0557335485237b2139910c0119bc028"
+  },
+  "Bank/telemetry/2021_03_12/metric/metric_app.csv": {
+    "bytes": 638751,
+    "sha256": "4e178b90f62d90662e2e9f6d41307b7c46373b2e7adfee6f253e7845f79828c3"
+  },
+  "Bank/telemetry/2021_03_12/metric/metric_container.csv": {
+    "bytes": 83447568,
+    "sha256": "2d83ce125d44ea1b06a7462c4ead3a87671b8b8b784da3fd430e35307feeb3f1"
+  },
+  "Bank/telemetry/2021_03_12/trace/trace_span.csv": {
+    "bytes": 2556233870,
+    "sha256": "3652f724cb57b77d1e597b0189e2a116602ff8cb8b2750f89c4d50a25c066788"
+  },
+  "Bank/telemetry/2021_03_23/log/log_service.csv": {
+    "bytes": 447369934,
+    "sha256": "852fdc22350ac1924a1eab4924ff69daba00b80a36af5d51d0179d8d701eef7d"
+  },
+  "Bank/telemetry/2021_03_23/metric/metric_app.csv": {
+    "bytes": 629656,
+    "sha256": "133d45187276dd3331ef70a449a64e47f597dfbebdd102d581e19e6d05ea1d7b"
+  },
+  "Bank/telemetry/2021_03_23/metric/metric_container.csv": {
+    "bytes": 77007359,
+    "sha256": "db374c935356344828a09f19c6751afb5f47b5334102f04c410a1492981860f8"
+  },
+  "Bank/telemetry/2021_03_23/trace/trace_span.csv": {
+    "bytes": 2469840756,
+    "sha256": "af297e6864fb11e69e4adf9f1d05df18f4f44af7da2b6039ca5ba06327675018"
+  },
+  "Bank/telemetry/2021_03_24/log/log_service.csv": {
+    "bytes": 435708516,
+    "sha256": "ad8abba0fa744ef0af340fdf2189cb8c898eb6c753bf236bc78833146d99e9c4"
+  },
+  "Bank/telemetry/2021_03_24/metric/metric_app.csv": {
+    "bytes": 640570,
+    "sha256": "1d32a96751d9008539f81b4ec7ea4e4d5f5c0ac5df078c2af366ddd817e9fca6"
+  },
+  "Bank/telemetry/2021_03_24/metric/metric_container.csv": {
+    "bytes": 76856235,
+    "sha256": "00875da15a0a7a78e3e5591c76d6147d19f4fbff965824bc0b3f240b75e50dc7"
+  },
+  "Bank/telemetry/2021_03_24/trace/trace_span.csv": {
+    "bytes": 2484272191,
+    "sha256": "6531c34c2041ed24cd939cfa8f28ce2b4984210cec23e02c130de461a54cfd35"
+  },
+  "Bank/telemetry/2021_03_25/log/log_service.csv": {
+    "bytes": 447317896,
+    "sha256": "3163a2404ce702213d6ec364b86d05b925aa8024e196aee3da05579764a8e43f"
+  },
+  "Bank/telemetry/2021_03_25/metric/metric_app.csv": {
+    "bytes": 633446,
+    "sha256": "c4b0a6d42d4434d361aa0f310c8a25dc6227eade626d0f571d01dcd4bf67b11a"
+  },
+  "Bank/telemetry/2021_03_25/metric/metric_container.csv": {
+    "bytes": 89559550,
+    "sha256": "9286270dfb1386186b7c8bf7f7556b1854226ac052bd2a03daab14197da3e7ff"
+  },
+  "Bank/telemetry/2021_03_25/trace/trace_span.csv": {
+    "bytes": 2578501342,
+    "sha256": "e4b98cd140223edcad4311c71bbf9a70dc5f95d528a3ff6ca9ab8b35fe98581b"
+  },
+  "Market/cloudbed-1/telemetry/2022_03_20/log/log_proxy.csv": {
+    "bytes": 3164305062,
+    "sha256": "6407b0c1ac9ce3cfc91c852020f65fad6ecbb69fbd56684e041165f038546b1c"
+  },
+  "Market/cloudbed-1/telemetry/2022_03_20/log/log_service.csv": {
+    "bytes": 704732295,
+    "sha256": "f99404af676e06dcb52d3658bf51d117745e7c809e39cc738afdcf80c4560b66"
+  },
+  "Market/cloudbed-1/telemetry/2022_03_20/metric/metric_container.csv": {
+    "bytes": 277859576,
+    "sha256": "6c40dc623124d981597ed5c59a3ad2247f390cb3750f627304d1e81eb869b036"
+  },
+  "Market/cloudbed-1/telemetry/2022_03_20/metric/metric_mesh.csv": {
+    "bytes": 259049304,
+    "sha256": "2ca1388b04dec71ecb08bb00ddaefa8a7e5d082d845c4823d40da84b8e01dacb"
+  },
+  "Market/cloudbed-1/telemetry/2022_03_20/metric/metric_node.csv": {
+    "bytes": 21963462,
+    "sha256": "9681289b46dbbe8b7af1a65c83c1d6ac7ae0c235b43d96ebed201a4f0a697fdc"
+  },
+  "Market/cloudbed-1/telemetry/2022_03_20/metric/metric_runtime.csv": {
+    "bytes": 92592147,
+    "sha256": "adeba61b2fb33a58a98101295779441f9391bfc15a54fc9ee99d250c69290bbc"
+  },
+  "Market/cloudbed-1/telemetry/2022_03_20/metric/metric_service.csv": {
+    "bytes": 1009707,
+    "sha256": "07d4f251a8e8acff46f38726479b39278af6e668cf4a2e8cd596ef91433e5f33"
+  },
+  "Market/cloudbed-1/telemetry/2022_03_20/trace/trace_span.csv": {
+    "bytes": 1357227973,
+    "sha256": "42057b3325dc32bda37fc98feaf07a9edb48bcf394f5b511e18b38f23670f550"
+  },
+  "Market/cloudbed-1/telemetry/2022_03_21/log/log_proxy.csv": {
+    "bytes": 3312525511,
+    "sha256": "76eb5e3b74c6c2c1687b3462fe5e7c46693cdf7eeeb05453f8cde7fd31f2fb43"
+  },
+  "Market/cloudbed-1/telemetry/2022_03_21/log/log_service.csv": {
+    "bytes": 741954866,
+    "sha256": "01d6ddf3fdaa2540cc56b7a88dd3e70b62f7e0782b2602d42516b42d75f966cc"
+  },
+  "Market/cloudbed-1/telemetry/2022_03_21/metric/metric_container.csv": {
+    "bytes": 277810139,
+    "sha256": "1f5cbb2e4a87aceba332e4b745851d2c6ccd5ae0f91cf25cfaa3ad44b4a343c1"
+  },
+  "Market/cloudbed-1/telemetry/2022_03_21/metric/metric_mesh.csv": {
+    "bytes": 268904535,
+    "sha256": "ec740a245b9662126711fc3ad94663e505ef661310a6d2a807c6e78132dc7f7a"
+  },
+  "Market/cloudbed-1/telemetry/2022_03_21/metric/metric_node.csv": {
+    "bytes": 22022770,
+    "sha256": "33e0aae8a7eebf2a4fa04bab64eb51b40757415781d4440db73208c5b141e39b"
+  },
+  "Market/cloudbed-1/telemetry/2022_03_21/metric/metric_runtime.csv": {
+    "bytes": 92646790,
+    "sha256": "25b47984f72a0e720677fff41f0fb4c1518feca2218f15212ced044b1c5b5522"
+  },
+  "Market/cloudbed-1/telemetry/2022_03_21/metric/metric_service.csv": {
+    "bytes": 1010653,
+    "sha256": "b3162daf511ad942c6bf47f18aa8f07beee51ad1ab033c571eab6ceeac310b89"
+  },
+  "Market/cloudbed-1/telemetry/2022_03_21/trace/trace_span.csv": {
+    "bytes": 1341305090,
+    "sha256": "b8e6673db463515422da8d0df37b5f3223d9bb03908f37b226d0d5023c9266ff"
+  },
+  "Market/cloudbed-2/telemetry/2022_03_20/log/log_proxy.csv": {
+    "bytes": 3803779279,
+    "sha256": "3667ece8a3eeca7de93a20a195f068f6b74925ea08c18e3c6209cecc979038cc"
+  },
+  "Market/cloudbed-2/telemetry/2022_03_20/log/log_service.csv": {
+    "bytes": 1052407890,
+    "sha256": "167fd76887046da4070aadebd57d55946e47e0078c21cac7df3ec2cdf90e646f"
+  },
+  "Market/cloudbed-2/telemetry/2022_03_20/metric/metric_container.csv": {
+    "bytes": 275798330,
+    "sha256": "6cafed1e6d6ce4deacbe5077871d78c1054a65adaf884819d9f9455eca1c5d9f"
+  },
+  "Market/cloudbed-2/telemetry/2022_03_20/metric/metric_mesh.csv": {
+    "bytes": 192319020,
+    "sha256": "4449a8a9fa95259f3aead7bd2b4c74096ced858b77c4761647a10c88e6b6dade"
+  },
+  "Market/cloudbed-2/telemetry/2022_03_20/metric/metric_node.csv": {
+    "bytes": 22010467,
+    "sha256": "6df6604d7d06347d41eea1acb07c7dbd3f9d796207aaa182067a1ff7f90dd63e"
+  },
+  "Market/cloudbed-2/telemetry/2022_03_20/metric/metric_runtime.csv": {
+    "bytes": 92584859,
+    "sha256": "5aecc0c2fbbf4859fcf5aa5cee220d25c146e2df9922a14dd5624b410f7a3cd2"
+  },
+  "Market/cloudbed-2/telemetry/2022_03_20/metric/metric_service.csv": {
+    "bytes": 1024774,
+    "sha256": "391d21473275bbc6250e43accd7ae070f154f3fdcca86386e8616db02045c854"
+  },
+  "Market/cloudbed-2/telemetry/2022_03_20/trace/trace_span.csv": {
+    "bytes": 1360811807,
+    "sha256": "9e0a1741bb048b71fdc21a596a7a18c85ac4fbb64e3ca890ddb4fb499c7a3428"
+  },
+  "Market/cloudbed-2/telemetry/2022_03_21/log/log_proxy.csv": {
+    "bytes": 3073840849,
+    "sha256": "a0094b1d0b976f80318da63234ebbbd5875b0eff0e3db5e8b6d6038fe6b92781"
+  },
+  "Market/cloudbed-2/telemetry/2022_03_21/log/log_service.csv": {
+    "bytes": 837913693,
+    "sha256": "1edeef7018c018ffbac81225fb8425dabd3e7ed132eb12a1a6f52c0bc6b9e41e"
+  },
+  "Market/cloudbed-2/telemetry/2022_03_21/metric/metric_container.csv": {
+    "bytes": 277606274,
+    "sha256": "12ad83a29433d1250b334419d4eb2aa8e9c4471ecec82f140d63721639862f6b"
+  },
+  "Market/cloudbed-2/telemetry/2022_03_21/metric/metric_mesh.csv": {
+    "bytes": 216313658,
+    "sha256": "e7a187c750a99a6233014e8d13eb3a1dffda4aed72a14a9b9c2936b3a5d6df56"
+  },
+  "Market/cloudbed-2/telemetry/2022_03_21/metric/metric_node.csv": {
+    "bytes": 22008921,
+    "sha256": "235a697a53ad7c7d98ee4e7e28ed4a7fc6ea428706d314eba48603d3c498a058"
+  },
+  "Market/cloudbed-2/telemetry/2022_03_21/metric/metric_runtime.csv": {
+    "bytes": 92334369,
+    "sha256": "7f212b29bdabf4b0efb8fcb69b47d5a91b6154dee8cf36480687d4545430542c"
+  },
+  "Market/cloudbed-2/telemetry/2022_03_21/metric/metric_service.csv": {
+    "bytes": 1025408,
+    "sha256": "ce0834792f14abcd54e0910d74b6023e18ce24a3b815338e54a9f7ff07737cfe"
+  },
+  "Market/cloudbed-2/telemetry/2022_03_21/trace/trace_span.csv": {
+    "bytes": 1334713942,
+    "sha256": "902fab725d69b0e7bf8f5d877b841c3ff04ece8849a06cd6572f7f4e562142ce"
+  },
+  "Telecom/telemetry/2020_04_11/metric/metric_app.csv": {
+    "bytes": 15952,
+    "sha256": "1a533b149e44cd13e1a0bca579ded7fb1ae9d4a5fbdd4137ee3845ccf6b256f5"
+  },
+  "Telecom/telemetry/2020_04_11/metric/metric_container.csv": {
+    "bytes": 2118854,
+    "sha256": "b7764731a86364cdd2d16f63fb14bc0e48571f0079b6df424171cb13de371249"
+  },
+  "Telecom/telemetry/2020_04_11/metric/metric_middleware.csv": {
+    "bytes": 7186364,
+    "sha256": "cc30f8a6a20b984dbb190e64ddeb6a8fc8559ff13f6ff1b06eab01ac221d48a8"
+  },
+  "Telecom/telemetry/2020_04_11/metric/metric_node.csv": {
+    "bytes": 21179793,
+    "sha256": "cccab03a25d59345e16d27d66d63debf8d227194f3ff46dcd82a2188eaa40893"
+  },
+  "Telecom/telemetry/2020_04_11/metric/metric_service.csv": {
+    "bytes": 11777056,
+    "sha256": "a8af8349c6419e98333f586d4584e20a330544ed11136670eecdf6167f4a8d2b"
+  },
+  "Telecom/telemetry/2020_04_11/trace/trace_span.csv": {
+    "bytes": 1165827254,
+    "sha256": "4a75e1ac9430d7b19b14f77dd985bef9e3252c46b59c8b2afa5dae9bcda788dd"
+  },
+  "Telecom/telemetry/2020_04_20/metric/metric_app.csv": {
+    "bytes": 15146,
+    "sha256": "661c5dfcc3e977f696cd9ae83cc3a85810810db7afeab8ad859dccc229873d3a"
+  },
+  "Telecom/telemetry/2020_04_20/metric/metric_container.csv": {
+    "bytes": 1902694,
+    "sha256": "e260048f957a4906f7dbf05c806b6584ee141cafc7d4ae2f38a2b3ddc90fefc0"
+  },
+  "Telecom/telemetry/2020_04_20/metric/metric_middleware.csv": {
+    "bytes": 7188100,
+    "sha256": "183f0d032a7d80e4669468b2b7cf8ed97dce37ef4596d609714bfc308c93865a"
+  },
+  "Telecom/telemetry/2020_04_20/metric/metric_node.csv": {
+    "bytes": 21177325,
+    "sha256": "c715de4164cf3c444a316326192093310edda22b98fa6a2326b31bc8fd34fc2a"
+  },
+  "Telecom/telemetry/2020_04_20/metric/metric_service.csv": {
+    "bytes": 11769307,
+    "sha256": "1a63cddfefced43ef2658857fd1e404fdc4820a468dc38d459d5b2f082deda45"
+  },
+  "Telecom/telemetry/2020_04_20/trace/trace_span.csv": {
+    "bytes": 1238868697,
+    "sha256": "97379fe614f54adc43641cea7838ac317ef06900e1ec7ead956baecab69ab594"
+  },
+  "Telecom/telemetry/2020_04_21/metric/metric_app.csv": {
+    "bytes": 15976,
+    "sha256": "2765d3d8918c0228af57169a703179ce3cd625d3b01e863cc0d70cf87a2bfe77"
+  },
+  "Telecom/telemetry/2020_04_21/metric/metric_container.csv": {
+    "bytes": 2044646,
+    "sha256": "90b41623d804eb6c6eb7dbb488f098c4b158954d96b05612abc9eda05c2ffbf4"
+  },
+  "Telecom/telemetry/2020_04_21/metric/metric_middleware.csv": {
+    "bytes": 6936259,
+    "sha256": "83e40db08e0802a3bdbaa422fb710e8ed57bee0537a24d5fe9058e36d3ee02d0"
+  },
+  "Telecom/telemetry/2020_04_21/metric/metric_node.csv": {
+    "bytes": 20425419,
+    "sha256": "5df0f58d98d192e39388f48c6f95c97916ab3064ca6c3cee6a3e494381d8dec4"
+  },
+  "Telecom/telemetry/2020_04_21/metric/metric_service.csv": {
+    "bytes": 11348806,
+    "sha256": "f766dcef3572c39c317f54220a7a21d881c22cb240b0e403c4b5d2cf28846c71"
+  },
+  "Telecom/telemetry/2020_04_21/trace/trace_span.csv": {
+    "bytes": 1127455594,
+    "sha256": "6eee59e448a123c78114c8c9ec552a85c29b3fa0c1e3266b51ebc8c316fc7ddc"
+  },
+  "Telecom/telemetry/2020_04_22/metric/metric_app.csv": {
+    "bytes": 16009,
+    "sha256": "a379abc461e2093d71d9c78e1209c14fbe4efae2231cd498b12374d8f42fd829"
+  },
+  "Telecom/telemetry/2020_04_22/metric/metric_container.csv": {
+    "bytes": 1946500,
+    "sha256": "b9c83480a45c1b79400034f17e13319366e2b3a5a0a21df1ebdbdcc098a72abc"
+  },
+  "Telecom/telemetry/2020_04_22/metric/metric_middleware.csv": {
+    "bytes": 7188932,
+    "sha256": "ea78606b98295500e26d1354c3108ad170a41439ed239eb4761552d58166490c"
+  },
+  "Telecom/telemetry/2020_04_22/metric/metric_node.csv": {
+    "bytes": 21115252,
+    "sha256": "b354d9bfb5d4107fba0eb3378960a74c0d87708b47ec7a3ac9af30e9f776cc09"
+  },
+  "Telecom/telemetry/2020_04_22/metric/metric_service.csv": {
+    "bytes": 11753497,
+    "sha256": "fe9a30b76e01dd6fce5121d92e68024b4a19da3eb22c809c6c9d4fce6558f913"
+  },
+  "Telecom/telemetry/2020_04_22/trace/trace_span.csv": {
+    "bytes": 1143167239,
+    "sha256": "9546e3d8e35728a5b82fbfb99053f1630c2d0774ce98ac6f9eb4178dbf002964"
+  },
+  "Telecom/telemetry/2020_04_23/metric/metric_app.csv": {
+    "bytes": 15636,
+    "sha256": "f4b9e567ffb970ed7bc9965f8de03a3668a4ad2f3c24c2dfdc34de26f52d001f"
+  },
+  "Telecom/telemetry/2020_04_23/metric/metric_container.csv": {
+    "bytes": 2066982,
+    "sha256": "96a894b16fe4bcddb2778b00d774ee0764e79b1792aefe1479d53ec38cead592"
+  },
+  "Telecom/telemetry/2020_04_23/metric/metric_middleware.csv": {
+    "bytes": 7187621,
+    "sha256": "58b57813681f40a2bdc4723c810763eaf5ba9c3026034bd85ffcd66a64777526"
+  },
+  "Telecom/telemetry/2020_04_23/metric/metric_node.csv": {
+    "bytes": 21148618,
+    "sha256": "6f8bc71f0aca2dd4fc007978615c3098c930c6fa7a8313fa7d320e22c8fe05b9"
+  },
+  "Telecom/telemetry/2020_04_23/metric/metric_service.csv": {
+    "bytes": 11770998,
+    "sha256": "b1110f2d499723419300c31bd6f2c1ecb45ca9bd17a02403082ae298a60c6a73"
+  },
+  "Telecom/telemetry/2020_04_23/trace/trace_span.csv": {
+    "bytes": 1190797020,
+    "sha256": "595b30bf27fe0d009ba0954e6f7a528ec29c38070134538d29a2d8fb819d312a"
+  },
+  "Telecom/telemetry/2020_05_22/metric/metric_app.csv": {
+    "bytes": 17962,
+    "sha256": "fa8b6757ec257c2b251360abe5798187dabb0488212bffb7b7a9b9dcd7c77eb8"
+  },
+  "Telecom/telemetry/2020_05_22/metric/metric_container.csv": {
+    "bytes": 1622035,
+    "sha256": "bf67700166da651a89ada2d33b8cea5191c36d494e34e81d9c6a36fffae383f8"
+  },
+  "Telecom/telemetry/2020_05_22/metric/metric_middleware.csv": {
+    "bytes": 6686539,
+    "sha256": "2b6e9d17896d863320134a0da2e0779ec12f285465598184493bb6b5287b3b16"
+  },
+  "Telecom/telemetry/2020_05_22/metric/metric_node.csv": {
+    "bytes": 12937905,
+    "sha256": "0d5ddced052c1414f6d20b34f5639aed84d94dcc816ece19c9d4014e8416399b"
+  },
+  "Telecom/telemetry/2020_05_22/metric/metric_service.csv": {
+    "bytes": 10976584,
+    "sha256": "c494d91320de75c5a6a526aa3cd4c878a285279f133721f102762f5b0969cf3b"
+  },
+  "Telecom/telemetry/2020_05_22/trace/trace_span.csv": {
+    "bytes": 1038540562,
+    "sha256": "573c1ea84043355702ed7b992d08e47a4f34dd6cdf9b505bacccf2e7bd40e6f1"
+  },
+  "Telecom/telemetry/2020_05_23/metric/metric_app.csv": {
+    "bytes": 16009,
+    "sha256": "805b299864a5769a00c3af01f8bd7efc10832db90511f6656b9acc78193c2809"
+  },
+  "Telecom/telemetry/2020_05_23/metric/metric_container.csv": {
+    "bytes": 1946498,
+    "sha256": "2b6aa2f29bc545820640945f8843dbd53d89c01f0691db0427580d24aa89f74e"
+  },
+  "Telecom/telemetry/2020_05_23/metric/metric_middleware.csv": {
+    "bytes": 7188932,
+    "sha256": "bf0ebbeca499922067b3da3fc222dc3ebcb3cf31bd189c8e93cfcc5bf3f92b2e"
+  },
+  "Telecom/telemetry/2020_05_23/metric/metric_node.csv": {
+    "bytes": 21115243,
+    "sha256": "9fd796c099f19eb1948c9b99456afd2209a98ede80feeba6685d7517f3954e15"
+  },
+  "Telecom/telemetry/2020_05_23/metric/metric_service.csv": {
+    "bytes": 11753490,
+    "sha256": "7775ed2c5b3dcec49e050f17820eb1d944a77e4ceec741e4bcb2a7c07725fc0a"
+  },
+  "Telecom/telemetry/2020_05_23/trace/trace_span.csv": {
+    "bytes": 1143167239,
+    "sha256": "eb2ad376183da9e22676df562530c6da736c2a3580d4007455c95cd9c2c10994"
+  },
+  "Telecom/telemetry/2020_05_24/metric/metric_app.csv": {
+    "bytes": 15770,
+    "sha256": "77d9775eb0c716091c4578d177ed686df48ef541580592142036065ad4ad28b1"
+  },
+  "Telecom/telemetry/2020_05_24/metric/metric_container.csv": {
+    "bytes": 2108741,
+    "sha256": "54cf7f8e5c40281651e73e579a78b2ac25146c09752f40bf9219d0916f848c16"
+  },
+  "Telecom/telemetry/2020_05_24/metric/metric_middleware.csv": {
+    "bytes": 7187868,
+    "sha256": "f2164ae65b3661c95423222743a0e865649843af99268b5fcc8f95ffa3960993"
+  },
+  "Telecom/telemetry/2020_05_24/metric/metric_node.csv": {
+    "bytes": 21117936,
+    "sha256": "8fb7353d3606dca7ebc711944d3f6ce95eed3d8e77dda364c6d2168cbd7a4ddc"
+  },
+  "Telecom/telemetry/2020_05_24/metric/metric_service.csv": {
+    "bytes": 11757247,
+    "sha256": "939dcb60a6808165c6dbeb9a95e14a40de3af4ff18e894d10fce97eeb98e96a7"
+  },
+  "Telecom/telemetry/2020_05_24/trace/trace_span.csv": {
+    "bytes": 1190669846,
+    "sha256": "268aeaa17fbabe3a0cf31eb1e87de4f976a32cf3b54cd9f84d4525c8da65560a"
+  },
+  "Telecom/telemetry/2020_05_25/metric/metric_app.csv": {
+    "bytes": 15636,
+    "sha256": "a4202795c5c86708ec65cf2af08cb321ee8c6438199c14ab2c4af2e54691f9cb"
+  },
+  "Telecom/telemetry/2020_05_25/metric/metric_container.csv": {
+    "bytes": 2066982,
+    "sha256": "1ed8ed241e9aeef07faf801a18f7f4b480d27b1ad8f2370b2188462d4df77f52"
+  },
+  "Telecom/telemetry/2020_05_25/metric/metric_middleware.csv": {
+    "bytes": 7187621,
+    "sha256": "ae7fb4f4cba1d1a0152c774a5ea05a3b2e2f6745e02db046f8c2c4d5fe2537f8"
+  },
+  "Telecom/telemetry/2020_05_25/metric/metric_node.csv": {
+    "bytes": 21148616,
+    "sha256": "4de5c28bcb77e69e47f9e2241bd8f48b65d40103ec8d4941647f3c2c5bb8803a"
+  },
+  "Telecom/telemetry/2020_05_25/metric/metric_service.csv": {
+    "bytes": 11770978,
+    "sha256": "acb0bb54294c3d11a9455ad0125aa31a24552f3b8e7db773488f802a9f1c5f20"
+  },
+  "Telecom/telemetry/2020_05_25/trace/trace_span.csv": {
+    "bytes": 1190797020,
+    "sha256": "578dc8cff6d7061d7e6883c7a31ea928d4d9a0b3447a67e40f45a7fbe807ef97"
+  },
+  "Telecom/telemetry/2020_05_26/metric/metric_app.csv": {
+    "bytes": 15865,
+    "sha256": "ee6efd8786dedb1e6dc77c5777b6c7ff419e1644288035e6b095cd33f9431521"
+  },
+  "Telecom/telemetry/2020_05_26/metric/metric_container.csv": {
+    "bytes": 2017925,
+    "sha256": "15d9fc93a29a5226ba75143d24ffcc9e54167809df2381d8359686b3de4c26e9"
+  },
+  "Telecom/telemetry/2020_05_26/metric/metric_middleware.csv": {
+    "bytes": 7186317,
+    "sha256": "9db71e4c4b3d2d032bcf473dc42fa497184d538b0c99f2c0067bf4dd665d756a"
+  },
+  "Telecom/telemetry/2020_05_26/metric/metric_node.csv": {
+    "bytes": 21262436,
+    "sha256": "8374318f95676f7948ac3abb4d6300a628f5feb43c33038a3a4a7e92e7bc40fd"
+  },
+  "Telecom/telemetry/2020_05_26/metric/metric_service.csv": {
+    "bytes": 11806043,
+    "sha256": "f0430f25afd4261975dbe917a9a127151f084f4433bdcc0edb71f76273f0bfeb"
+  },
+  "Telecom/telemetry/2020_05_26/trace/trace_span.csv": {
+    "bytes": 1123661161,
+    "sha256": "a38ffacac124ce339a5625353b110b00cb460b336e64455a6d8a634f1b9c6c59"
+  },
+  "Telecom/telemetry/2020_05_27/metric/metric_app.csv": {
+    "bytes": 15877,
+    "sha256": "45e8bba605f2bfa10162044bb569436b6923892fe4033e633243924c761fa11a"
+  },
+  "Telecom/telemetry/2020_05_27/metric/metric_container.csv": {
+    "bytes": 2001204,
+    "sha256": "4b09e34189203bd3de2a938f093598831fe28333339300640a7cb3f00f2923f1"
+  },
+  "Telecom/telemetry/2020_05_27/metric/metric_middleware.csv": {
+    "bytes": 6947537,
+    "sha256": "a1d742358d64f2e6e365a4869c792c258ac90e9468c2f6d5d9bb9b950dc14678"
+  },
+  "Telecom/telemetry/2020_05_27/metric/metric_node.csv": {
+    "bytes": 20414523,
+    "sha256": "7730290d1b1bf140f7240ba1c336970a091447bfc140cccb83d8636e0b042c8c"
+  },
+  "Telecom/telemetry/2020_05_27/metric/metric_service.csv": {
+    "bytes": 11347923,
+    "sha256": "2a38e49df439cd716986da5174c1309c39b4c2a4adf07a1b63ba96763dcab6f9"
+  },
+  "Telecom/telemetry/2020_05_27/trace/trace_span.csv": {
+    "bytes": 1114918674,
+    "sha256": "3b936ce6732c7a2a4976c448f08faf2cf8344f2ac83834eb01acf4e5cca6713b"
+  },
+  "Telecom/telemetry/2020_05_28/metric/metric_app.csv": {
+    "bytes": 15858,
+    "sha256": "8224eacc1603a165c8a21b50a1cf7aa7762cfcb6c7875b90e8be5e27c6df573f"
+  },
+  "Telecom/telemetry/2020_05_28/metric/metric_container.csv": {
+    "bytes": 2017250,
+    "sha256": "091399166cd35ff20b254d24cf2fba723f1ad312f43aff4ee26c96f47635cd5d"
+  },
+  "Telecom/telemetry/2020_05_28/metric/metric_middleware.csv": {
+    "bytes": 7188383,
+    "sha256": "ff80ffc2fa90b5b694b7f52b852ecb079cd5ebc0a8c3fe7065d095885238433d"
+  },
+  "Telecom/telemetry/2020_05_28/metric/metric_node.csv": {
+    "bytes": 21111174,
+    "sha256": "eac287de4004974ce73eed23f8ea63bfc7f1d4f325a711ef4f2d68cc021e6314"
+  },
+  "Telecom/telemetry/2020_05_28/metric/metric_service.csv": {
+    "bytes": 11768264,
+    "sha256": "09c8f273fd07f031b3971f755c2473e19aa433fa3a697e86635def00d75b14fb"
+  },
+  "Telecom/telemetry/2020_05_28/trace/trace_span.csv": {
+    "bytes": 1226267013,
+    "sha256": "f1d05faebce8c6642f6b7850dbc2fe7f1708563321def7d84fc8e3cbcf5f0dc3"
+  },
+  "Telecom/telemetry/2020_05_29/metric/metric_app.csv": {
+    "bytes": 23979,
+    "sha256": "046b87aef29b42597f36c16ebb0633d4f8ef924d9c3002987ea7bd0e3d19dccf"
+  },
+  "Telecom/telemetry/2020_05_29/metric/metric_container.csv": {
+    "bytes": 1641978,
+    "sha256": "733fd7c9407a5eda99547913f81d814a10d15469c9238d3f16ad87b3e39c8928"
+  },
+  "Telecom/telemetry/2020_05_29/metric/metric_middleware.csv": {
+    "bytes": 7157702,
+    "sha256": "769dcc7bc735852c5b812591ec29a14064df666fc71baaa81bc947149ea3df76"
+  },
+  "Telecom/telemetry/2020_05_29/metric/metric_node.csv": {
+    "bytes": 14011423,
+    "sha256": "70e33029e00521bd6090498cdd0cf0c2456030a89eff3a7ea9de24fae5c8083d"
+  },
+  "Telecom/telemetry/2020_05_29/metric/metric_service.csv": {
+    "bytes": 11633424,
+    "sha256": "6e87f90651472ebcd5748e6c0c2fea2130c16e298616b8f1c55d9fcc53477609"
+  },
+  "Telecom/telemetry/2020_05_29/trace/trace_span.csv": {
+    "bytes": 856742763,
+    "sha256": "ef8e0c262f7ac93ba86c70578304ea5f91cd5bd641797512dab6973d21d76007"
+  },
+  "Telecom/telemetry/2020_05_30/metric/metric_app.csv": {
+    "bytes": 15978,
+    "sha256": "013b16d4ec827ce69506c8d9bc2614352fc8c596d715a40e9f1cb13693d68988"
+  },
+  "Telecom/telemetry/2020_05_30/metric/metric_container.csv": {
+    "bytes": 1961345,
+    "sha256": "028a0ad1ca724f101207497a48bf5e0939ea1a121cc9fd5aec1d64b719e1f423"
+  },
+  "Telecom/telemetry/2020_05_30/metric/metric_middleware.csv": {
+    "bytes": 7187000,
+    "sha256": "8dafb36610c9eab92577abdd44152f4491e31d7c18c5bba2a9400f89e5493f0e"
+  },
+  "Telecom/telemetry/2020_05_30/metric/metric_node.csv": {
+    "bytes": 21195609,
+    "sha256": "542e6d94994cf94e7a107400a98ab591f4a40ae4b8323fd420a1244ae3d66560"
+  },
+  "Telecom/telemetry/2020_05_30/metric/metric_service.csv": {
+    "bytes": 11789828,
+    "sha256": "028b29e61a20e23ca830e7f854c214759fed314ecb0620abbad9ff30670c4fc5"
+  },
+  "Telecom/telemetry/2020_05_30/trace/trace_span.csv": {
+    "bytes": 1169704316,
+    "sha256": "d80ee41ee728270b7e90cd21b335cc7b7e9c92d24ee3e9ad00126f64458c0161"
+  },
+  "Telecom/telemetry/2020_05_31/metric/metric_app.csv": {
+    "bytes": 15976,
+    "sha256": "4e0f8ca56e090377d8e1cd0a54722971cf6a0ec5e5f2276553238a5240ebabff"
+  },
+  "Telecom/telemetry/2020_05_31/metric/metric_container.csv": {
+    "bytes": 2044645,
+    "sha256": "5afde8aade1f4c9b7fe0f945d58a42ccabdeabc37f65f76370aae29707835e04"
+  },
+  "Telecom/telemetry/2020_05_31/metric/metric_middleware.csv": {
+    "bytes": 6936259,
+    "sha256": "3d2ab1cea0193bde54cb89aa0ba1518b5b1ebb84338c9005ed77b48d57600b02"
+  },
+  "Telecom/telemetry/2020_05_31/metric/metric_node.csv": {
+    "bytes": 20425418,
+    "sha256": "487c3d77f42c265945fd309b527dea3e7e16f9322a648b2458c55f5624cb6c9e"
+  },
+  "Telecom/telemetry/2020_05_31/metric/metric_service.csv": {
+    "bytes": 11348801,
+    "sha256": "3e965331347c9810aa107b69e8389342dc0dfdc2473aaa4b36f1b3233b8285cd"
+  },
+  "Telecom/telemetry/2020_05_31/trace/trace_span.csv": {
+    "bytes": 1127455594,
+    "sha256": "f93f9ba00adf134561fe8c42aef8d3e91b3225ad41cb796ee3a8a5495b6ed5cb"
+  }
+}

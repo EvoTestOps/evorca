@@ -1,6 +1,6 @@
 /**
  * The report that `evorca reproduce --benchmark=openrca` prints. It reads the
- * answer keys that `evorca fetch --benchmark=openrca` writes.
+ * answer keys that the command fetches before it scores.
  *
  * @module
  */

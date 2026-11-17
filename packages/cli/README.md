@@ -6,8 +6,8 @@ The `evorca` command. From the repository root, `pnpm evorca` runs it without a 
 
 - An interactive shell in the terminal, built with [OpenTUI](https://github.com/anomalyco/opentui), which `evorca` opens when it runs without arguments. It shows the evorca banner, the version and the working directory, a transcript of the session, and an input box at the bottom of the screen.
 - The slash commands `/help` and `/exit`.
-- `evorca fetch`, which downloads the data of a benchmark's scenarios into `data/benchmarks/<benchmark>/<scenario>/` at the repository root.
-- `evorca reproduce`, which checks that evorca reproduces the scores that a benchmark publishes. It keeps the scorer's checkout and environment in `.cache/` at the repository root.
+- `evorca fetch`, which downloads the answer keys and the telemetry of a benchmark's scenarios into `data/benchmarks/<benchmark>/<scenario>/` at the repository root.
+- `evorca reproduce`, which downloads only the answer keys and checks that evorca reproduces the scores that a benchmark publishes. It keeps the scorer's checkout and environment in `.cache/` at the repository root.
 - One benchmark, `openrca`, through [`@evorca/openrca`](../openrca/README.md).
 
 ## Non-goals
@@ -31,7 +31,17 @@ evorca reproduce --benchmark=<benchmark> [--scenario=<scenario>...]
 - `--benchmark` is required. The only benchmark is `openrca`.
 - `--scenario` names one scenario and can repeat. Without it, the command uses every scenario of the benchmark. The `openrca` scenarios are `bank`, `telecom`, `market-cloudbed-1`, and `market-cloudbed-2`.
 
-`evorca fetch` prints one line per file: `fetched` or `present`, the path, the size in bytes, and the SHA-256. `evorca reproduce` prints a report and exits with code 1 if a score differs from the published score. Both commands exit with code 1 and list the valid choices if the command, the benchmark, or a scenario is unknown.
+`evorca fetch` prints one line for each file that is already present, and two lines for each file that it downloads: one when the download starts and one when it is done. A line has the status, the path, and the size in bytes. A `present` or `fetched` line also has the SHA-256:
+
+```text
+present  data/benchmarks/openrca/telecom/query.csv  20356 bytes  sha256 c2726ea18183a05c83dfb22796d20cb7a371ce4db51ce3da3fda3f6e793735b5
+fetching  data/benchmarks/openrca/telecom/telemetry/2020_04_11/trace/trace_span.csv  1165827254 bytes
+fetched  data/benchmarks/openrca/telecom/telemetry/2020_04_11/trace/trace_span.csv  1165827254 bytes  sha256 4a75e1ac9430d7b19b14f77dd985bef9e3252c46b59c8b2afa5dae9bcda788dd
+```
+
+`evorca reproduce` prints the same lines for the answer keys, then a report. It exits with code 1 if a score differs from the published score.
+
+Both commands exit with code 1 and list the valid choices if the command, the benchmark, or a scenario is unknown. They also exit with code 1, and print the reason, if a file on disk does not match its pinned hash, if the missing files need more than the free disk space, or if a download fails. The free-space message gives both sizes in GB.
 
 ## Use the shell
 
@@ -56,7 +66,7 @@ You need network access to drive.usercontent.google.com. From the repository roo
 pnpm evorca fetch --benchmark=openrca --scenario=bank
 ```
 
-The command writes `data/benchmarks/openrca/bank/query.csv` and `data/benchmarks/openrca/bank/record.csv`. A file that is already present and matches its pinned hash stays as it is, so a second run downloads nothing. To fetch all four scenarios, leave out `--scenario`.
+The command writes the answer keys, `query.csv` and `record.csv`, to `data/benchmarks/openrca/bank/` and the telemetry to `data/benchmarks/openrca/bank/telemetry/`. The telemetry of `bank` is 26.40 GB, and the telemetry of all four scenarios is 68.65 GB. A file that is already present and matches its pinned hash stays as it is, so a second run downloads nothing. To fetch all four scenarios, leave out `--scenario`.
 
 ## Reproduce the archive scores
 
@@ -74,10 +84,9 @@ From a fresh clone, run:
 
 ```sh
 pnpm install
-pnpm evorca fetch --benchmark=openrca
 pnpm evorca reproduce --benchmark=openrca
 ```
 
-`evorca fetch` writes to `data/benchmarks/openrca/`. `evorca reproduce` checks out OpenRCA and creates the Python environment in `.cache/openrca/`. Both commands skip work that a previous run finished.
+`evorca reproduce` first downloads the answer keys, `query.csv` and `record.csv`, of each scenario to `data/benchmarks/openrca/`, about 170 KB in all. It reads no telemetry, so it does not need the 68.65 GB that `evorca fetch` downloads. Then it checks out OpenRCA and creates the Python environment in `.cache/openrca/`. A second run skips the work that a previous run finished.
 
-`evorca reproduce` prints the pinned inputs and the Node, uv, and Python versions first. Then it prints one block per scenario with the matches in each stage, the accuracy per difficulty, and each mismatch. The last block, `All scenarios`, gives the accuracy over the scenarios that the command checked. To check only some scenarios, name each one with `--scenario`. The [`@evorca/openrca` README](../openrca/README.md#reproduce-the-archive-scores) lists the expected result.
+After the lines for the answer keys, `evorca reproduce` prints the pinned inputs and the Node, uv, and Python versions. Then it prints one block per scenario with the matches in each stage, the accuracy per difficulty, and each mismatch. The last block, `All scenarios`, gives the accuracy over the scenarios that the command checked. To check only some scenarios, name each one with `--scenario`. The [`@evorca/openrca` README](../openrca/README.md#reproduce-the-archive-scores) lists the expected result.

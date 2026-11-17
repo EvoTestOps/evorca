@@ -1,7 +1,7 @@
 /**
- * Reads one file out of a zip archive on a web server without downloading the
+ * Reads files out of a zip archive on a web server without downloading the
  * whole archive. A zip archive ends with a directory of its entries, so a reader
- * needs only that directory and the entry it wants, which HTTP Range requests
+ * needs only that directory and the entries it wants, which HTTP Range requests
  * fetch. Reads of up to 1 MiB share one buffered response, so the many small
  * reads that yauzl makes cost one request. A larger read streams from its own
  * response, so memory use does not grow with the size of an entry.
@@ -14,30 +14,39 @@ import yauzl from "yauzl";
 
 const windowBytes = 1024 * 1024;
 
+/** A zip archive on a web server whose directory has been read. */
+export type RemoteZip = {
+  readonly fileNames: readonly string[];
+  open(fileName: string): Promise<Readable>;
+};
+
 /**
- * Opens one entry of a zip archive over HTTP as a stream of its uncompressed
- * contents.
+ * Reads the directory of a zip archive over HTTP. `fileNames` lists its
+ * entries, and `open` streams the uncompressed contents of one entry.
  *
  * @param url - The archive's URL. Its server must answer Range requests with a
  *   `content-range` header.
  * @param bytes - The size of the archive. Every response must report this
  *   total, so a changed archive fails instead of returning other bytes.
  * @throws Error if a response does not cover the requested range of a
- *   `bytes`-long file, or if the archive has no entry named `fileName`. The
- *   stream fails in the same way for a response that it reads later.
+ *   `bytes`-long file. `open` and its stream fail in the same way, and `open`
+ *   also fails if the archive has no entry named `fileName`.
  */
-export async function openRemoteZipEntry(
-  url: string,
-  bytes: number,
-  fileName: string,
-): Promise<Readable> {
+export async function openRemoteZip(url: string, bytes: number): Promise<RemoteZip> {
   const zip = await yauzl.fromRandomAccessReaderPromise(new RemoteFile(url, bytes), bytes, {
     lazyEntries: true,
+    autoClose: false,
   });
-  for await (const entry of zip.eachEntry()) {
-    if (entry.fileName === fileName) return zip.openReadStreamPromise(entry);
-  }
-  throw new Error(`${fileName} is not in ${url}`);
+  const entries = new Map<string, yauzl.Entry>();
+  for await (const entry of zip.eachEntry()) entries.set(entry.fileName, entry);
+  return {
+    fileNames: [...entries.keys()],
+    async open(fileName) {
+      const entry = entries.get(fileName);
+      if (entry === undefined) throw new Error(`${fileName} is not in ${url}`);
+      return zip.openReadStreamPromise(entry);
+    },
+  };
 }
 
 class RemoteFile extends yauzl.RandomAccessReader {

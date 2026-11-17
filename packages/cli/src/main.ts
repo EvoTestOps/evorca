@@ -3,11 +3,12 @@
  * Without arguments, `evorca` opens the interactive shell full screen, and
  * exits with code 1 when stdin or stdout is not a terminal. It loads the shell
  * on demand, so the other commands never load OpenTUI's native library.
- * `evorca fetch` downloads the data of a benchmark's scenarios into
- * `data/benchmarks/<benchmark>/<scenario>/` at the repository root.
- * `evorca reproduce` checks that evorca reproduces the scores that the
- * benchmark publishes, and keeps the scorer's checkout and environment in
- * `.cache/` at the repository root.
+ * `evorca fetch` downloads the data of a benchmark's scenarios, the answer keys
+ * and the telemetry, into `data/benchmarks/<benchmark>/<scenario>/` at the
+ * repository root.
+ * `evorca reproduce` downloads only the answer keys of those scenarios, checks
+ * that evorca reproduces the scores that the benchmark publishes, and keeps the
+ * scorer's checkout and environment in `.cache/` at the repository root.
  *
  * @module
  */
@@ -15,11 +16,16 @@ import { relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { openRcaScenarios } from "@evorca/openrca";
-import { fetchOpenRcaData } from "@evorca/openrca/dataset";
+import { answerKeyFiles, fetchOpenRcaData, type FileProgress } from "@evorca/openrca/dataset";
 import { reproduceOpenRca } from "./openrca.js";
 
 const benchmarks = {
-  openrca: { scenarios: openRcaScenarios, fetch: fetchOpenRcaData, reproduce: reproduceOpenRca },
+  openrca: {
+    scenarios: openRcaScenarios,
+    answerKeys: answerKeyFiles,
+    fetch: fetchOpenRcaData,
+    reproduce: reproduceOpenRca,
+  },
 };
 
 type Benchmark = (typeof benchmarks)[keyof typeof benchmarks];
@@ -33,13 +39,10 @@ type Invocation = {
 
 const commands = {
   async fetch({ benchmark, scenarios, dataDir }: Invocation) {
-    for (const file of await benchmark.fetch({ scenarios, dataDir })) {
-      const status = file.fetched ? "fetched" : "present";
-      const path = relative(process.cwd(), file.path);
-      console.log(`${status}  ${path}  ${file.bytes} bytes  sha256 ${file.sha256}`);
-    }
+    await printProgress(benchmark.fetch({ scenarios, dataDir }));
   },
   async reproduce({ benchmark, scenarios, dataDir, cacheDir }: Invocation) {
+    await printProgress(benchmark.fetch({ scenarios, dataDir, files: benchmark.answerKeys }));
     if (!(await benchmark.reproduce({ scenarios, dataDir, cacheDir }))) process.exitCode = 1;
   },
 };
@@ -79,6 +82,17 @@ if (positionals.length === 0 && Object.keys(values).length === 0) {
     dataDir: fileURLToPath(new URL(`data/benchmarks/${name}/`, root)),
     cacheDir: fileURLToPath(new URL(".cache/", root)),
   });
+}
+
+async function printProgress(progress: AsyncIterable<FileProgress>) {
+  try {
+    for await (const { status, path, bytes, sha256 } of progress) {
+      const hash = status === "fetching" ? "" : `  sha256 ${sha256}`;
+      console.log(`${status}  ${relative(process.cwd(), path)}  ${bytes} bytes${hash}`);
+    }
+  } catch (error: unknown) {
+    fail(error instanceof Error ? error.message : String(error));
+  }
 }
 
 function parseCommandLine() {
