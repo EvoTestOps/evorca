@@ -1,7 +1,7 @@
 /**
  * Downloads OpenRCA's answer keys, `query.csv` and `record.csv`, from the
  * published dataset archives. The archives hold about 8.8 GB, almost all of it
- * telemetry, so fetchOpenRcaData reads only these two files of each system. It
+ * telemetry, so fetchOpenRcaData reads only these two files of each scenario. It
  * streams each file through SHA-256 and never holds a whole file in memory. A
  * file already on disk that matches stays, so a second run downloads nothing.
  *
@@ -10,7 +10,7 @@
 import { createHash } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
 import { mkdir, rename, stat } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
 import type { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import {
@@ -20,43 +20,51 @@ import {
   type Archive,
   type DataFile,
 } from "../pinned.js";
-import type { OpenRcaSystem } from "../tasks.js";
+import {
+  archiveEntry,
+  openRcaScenarios,
+  scenarioPath,
+  type OpenRcaScenario,
+} from "../scenarios.js";
 import { removeOnDispose } from "../temp.js";
 import { openRemoteZipEntry } from "./remote-zip.js";
 
-/** A file that fetchOpenRcaData checked. `fetched` is false for a file that was already on disk. */
+/** A file at `path` that fetchOpenRcaData checked. `fetched` is false for a file that was already there. */
 type FetchedFile = {
-  readonly file: DataFile;
+  readonly path: string;
   readonly bytes: number;
   readonly sha256: string;
   readonly fetched: boolean;
 };
 
 /**
- * Makes sure that `<dataDir>/<system>/query.csv` and `record.csv` exist and match
- * their hashes, and returns one entry per file in the order of `systems`, with
- * `query.csv` first. It renames a download into place only once its hash matches,
- * so a failed or interrupted run never leaves a wrong file under the final name.
+ * Makes sure that `<dataDir>/<scenario>/query.csv` and `record.csv` exist and
+ * match their hashes, and returns one entry per file in the order of
+ * `scenarios`, with `query.csv` first. It renames a download into place only
+ * once its hash matches, so a failed or interrupted run never leaves a wrong
+ * file under the final name.
  *
  * @throws Error if a file on disk or a downloaded file does not match its hash,
  *   or if a download fails.
  */
 export async function fetchOpenRcaData({
-  systems,
+  scenarios,
   dataDir,
   archives = driveArchives,
   sha256 = dataFileSha256,
 }: {
-  readonly systems: readonly OpenRcaSystem[];
+  readonly scenarios: readonly OpenRcaScenario[];
   readonly dataDir: string;
   readonly archives?: Readonly<Record<keyof typeof driveArchives, Archive>>;
   readonly sha256?: Readonly<Record<DataFile, string>>;
 }): Promise<FetchedFile[]> {
   const fetched: FetchedFile[] = [];
-  for (const system of systems) {
-    const archive = archives[archiveOf[system]];
-    for (const file of [`${system}/query.csv`, `${system}/record.csv`] as const) {
-      fetched.push(await ensureFile({ archive, file, sha256: sha256[file], dataDir }));
+  for (const scenario of scenarios) {
+    const archive = archives[archiveOf[openRcaScenarios[scenario]]];
+    for (const file of ["query.csv", "record.csv"] as const) {
+      const entry = archiveEntry(scenario, file);
+      const path = scenarioPath(dataDir, scenario, file);
+      fetched.push(await ensureFile({ archive, entry, sha256: sha256[entry], path }));
     }
   }
   return fetched;
@@ -64,24 +72,23 @@ export async function fetchOpenRcaData({
 
 async function ensureFile({
   archive,
-  file,
+  entry,
   sha256,
-  dataDir,
+  path,
 }: {
   readonly archive: Archive;
-  readonly file: DataFile;
+  readonly entry: DataFile;
   readonly sha256: string;
-  readonly dataDir: string;
+  readonly path: string;
 }): Promise<FetchedFile> {
-  const path = join(dataDir, file);
   const local = await hashFile(path);
   if (local === undefined) {
     await mkdir(dirname(path), { recursive: true });
     await using temp = removeOnDispose(`${path}.tmp`);
-    const entry = await openRemoteZipEntry(archive.url, archive.bytes, file);
-    const downloaded = await copyHashed(entry, temp.path);
+    const source = await openRemoteZipEntry(archive.url, archive.bytes, entry);
+    const downloaded = await copyHashed(source, temp.path);
     verify({
-      file,
+      entry,
       actual: downloaded,
       expected: sha256,
       problem: "the download is not the published file",
@@ -89,14 +96,14 @@ async function ensureFile({
     await rename(temp.path, path);
   } else {
     verify({
-      file,
+      entry,
       actual: local,
       expected: sha256,
       problem: `${path} is not the published file; delete it`,
     });
   }
   const { size } = await stat(path);
-  return { file, bytes: size, sha256, fetched: local === undefined };
+  return { path, bytes: size, sha256, fetched: local === undefined };
 }
 
 /** Returns the SHA-256 of the file at `path` in hex, or undefined if the file does not exist. */
@@ -128,17 +135,17 @@ async function copyHashed(source: Readable, path: string): Promise<string> {
 }
 
 function verify({
-  file,
+  entry,
   actual,
   expected,
   problem,
 }: {
-  readonly file: DataFile;
+  readonly entry: DataFile;
   readonly actual: string;
   readonly expected: string;
   readonly problem: string;
 }): void {
   if (actual !== expected) {
-    throw new Error(`${file}: ${problem} (sha256 ${actual}, expected ${expected})`);
+    throw new Error(`${entry}: ${problem} (sha256 ${actual}, expected ${expected})`);
   }
 }

@@ -18,12 +18,14 @@
     "test": "pnpm -r --if-present test",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check": "pnpm format:check && pnpm typecheck && pnpm test && pnpm build"
+    "check": "pnpm format:check && pnpm typecheck && pnpm test && pnpm build",
+    "evorca": "tsx packages/cli/src/main.ts"
   },
   "devDependencies": {
     "@changesets/cli": "^3.0.3",
     "@types/node": "^22.20.5",
     "prettier": "^3.9.10",
+    "tsx": "^4.23.15",
     "typescript": "^6.0.3",
     "vitest": "^5.0.5"
   }

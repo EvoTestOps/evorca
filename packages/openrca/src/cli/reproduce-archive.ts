@@ -1,26 +1,32 @@
 /**
  * `pnpm --filter @evorca/openrca reproduce-archive` checks that this package,
  * with the official evaluator, reproduces every score in OpenRCA's archive of
- * RCA-Agent predictions. It scores the systems one at a time, then prints the
- * pinned inputs, the tool versions, one block per system, and a summary over
- * all systems. It exits with code 1 if any score differs.
+ * RCA-Agent predictions. It reads the answer keys that `pnpm evorca fetch
+ * --benchmark=openrca` writes to `data/benchmarks/openrca/`. It scores the
+ * scenarios one at a time, then prints the pinned inputs, the tool versions,
+ * one block per scenario, and a summary over all scenarios. It exits with code
+ * 1 if any score differs.
  *
  * @module
  */
 import { execFile } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { dataFileSha256, driveArchives, openRcaCommit, openRcaRepository } from "../pinned.js";
+import { openRcaScenarios, type OpenRcaScenario } from "../scenarios.js";
 import { reproduceArchive, type Mismatch, type Stage } from "../scoring/archive.js";
 import { evaluatorPython } from "../scoring/evaluator.js";
 import { summarize, type Summary } from "../scoring/summary.js";
-import { openRcaSystems } from "../tasks.js";
-import { cacheDir, dataDir } from "./paths.js";
+
+const dataDir = fileURLToPath(new URL("../../../../data/benchmarks/openrca/", import.meta.url));
+const cacheDir = fileURLToPath(new URL("../../../../.cache/", import.meta.url));
 
 const uv = (await promisify(execFile)("uv", ["--version"])).stdout.trim();
 const python = await evaluatorPython(cacheDir);
-const results = await Array.fromAsync(openRcaSystems, async (system) => ({
-  system,
-  ...(await reproduceArchive({ system, dataDir, cacheDir })),
+const scenarios = Object.keys(openRcaScenarios) as OpenRcaScenario[];
+const results = await Array.fromAsync(scenarios, async (scenario) => ({
+  scenario,
+  ...(await reproduceArchive({ scenario, dataDir, cacheDir })),
 }));
 const mismatches = results.flatMap((result) => [
   ...result.published.mismatches,
@@ -35,15 +41,15 @@ for (const [file, sha256] of Object.entries(dataFileSha256)) {
   console.log(`sha256 ${sha256}  ${file}`);
 }
 console.log(`node ${process.version}, ${uv}, ${python}`);
-for (const { system, tasks, published, roundTripped } of results) {
+for (const { scenario, tasks, published, roundTripped } of results) {
   const stages = `stage 1 ${matched(published, tasks)}, stage 2 ${matched(roundTripped, tasks)}`;
-  console.log(`\n${system}: ${tasks} rows, ${stages}`);
+  console.log(`\n${scenario}: ${tasks} rows, ${stages}`);
   printSummary(summarize(roundTripped.scores));
   for (const mismatch of [...published.mismatches, ...roundTripped.mismatches]) {
     printMismatch(mismatch);
   }
 }
-console.log("\nAll systems:");
+console.log("\nAll scenarios:");
 printSummary(summarize(results.flatMap((result) => result.roundTripped.scores)));
 console.log(
   mismatches.length === 0

@@ -89,11 +89,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Writes the prediction CSV for one system, with a `prediction` header and one
+ * Writes the prediction CSV for one scenario, with a `prediction` header and one
  * row per task in the order of `tasks`. A task gets the diagnosis keyed by its
  * `row`, or `{}` if `diagnoses` has none.
  *
- * @param tasks - Every task of the system in row order, as `readTasks` returns
+ * @param tasks - Every task of the scenario in row order, as `readTasks` returns
  *   them, because the evaluator matches predictions to tasks by position.
  */
 export function writePredictions(

@@ -8,7 +8,7 @@
  *
  * @module
  */
-import type { OpenRcaSystem } from "./tasks.js";
+import type { OpenRcaSystem, ScenarioFile } from "./scenarios.js";
 
 /** OpenRCA's git repository. */
 export const openRcaRepository = "https://github.com/microsoft/OpenRCA.git";
@@ -49,8 +49,8 @@ export const archiveOf: Record<OpenRcaSystem, keyof typeof driveArchives> = {
   "Market/cloudbed-2": "Market",
 };
 
-/** The path of a file this package reads, relative to the dataset directory and inside its archive. */
-export type DataFile = `${OpenRcaSystem}/${"query" | "record"}.csv`;
+/** The path of a file this package reads, inside its published archive. */
+export type DataFile = `${OpenRcaSystem}/${ScenarioFile}`;
 
 /** The SHA-256 of each published file, in lowercase hex. */
 export const dataFileSha256: Record<DataFile, string> = {

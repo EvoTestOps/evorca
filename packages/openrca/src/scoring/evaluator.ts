@@ -14,7 +14,8 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { parseCsv } from "../csv.js";
 import { openRcaCommit, openRcaRepository } from "../pinned.js";
-import { parseTaskIndex, type OpenRcaSystem, type TaskIndex } from "../tasks.js";
+import { scenarioPath, type OpenRcaScenario } from "../scenarios.js";
+import { parseTaskIndex, type TaskIndex } from "../tasks.js";
 import { removeOnDispose } from "../temp.js";
 
 const run = promisify(execFile);
@@ -67,7 +68,7 @@ export async function evaluatorPython(cacheDir: string): Promise<string> {
 /**
  * Scores the prediction file at `predictionsPath` with the official evaluator
  * and returns one score per task, in row order. The file needs a `prediction`
- * column and one row per task in `<dataDir>/<system>/query.csv`, as
+ * column and one row per task in `<dataDir>/<scenario>/query.csv`, as
  * `writePredictions` writes it. If it has a `row_id` column, the evaluator sorts
  * the rows by it.
  *
@@ -76,12 +77,12 @@ export async function evaluatorPython(cacheDir: string): Promise<string> {
  */
 export async function scoreWithOfficialEvaluator({
   predictionsPath,
-  system,
+  scenario,
   dataDir,
   cacheDir,
 }: {
   readonly predictionsPath: string;
-  readonly system: OpenRcaSystem;
+  readonly scenario: OpenRcaScenario;
   readonly dataDir: string;
   readonly cacheDir: string;
 }): Promise<ScoredRow[]> {
@@ -89,7 +90,7 @@ export async function scoreWithOfficialEvaluator({
   // The evaluator appends to a report that already exists, so each run writes to a new directory.
   await using work = removeOnDispose(await mkdtemp(join(tmpdir(), "evorca-openrca-")));
   const report = join(work.path, "report.csv");
-  const query = resolve(dataDir, system, "query.csv");
+  const query = resolve(scenarioPath(dataDir, scenario, "query.csv"));
   const args = ["-m", "main.evaluate", "-p", resolve(predictionsPath), "-q", query, "-r", report];
   await runPython(cacheDir, args, checkout).catch((error: unknown) => {
     if (error instanceof Error && "stdout" in error && typeof error.stdout === "string") {
