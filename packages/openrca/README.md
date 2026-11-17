@@ -1,10 +1,11 @@
 # @evorca/openrca
 
-OpenRCA benchmark support for evorca. It reads [OpenRCA](https://github.com/microsoft/OpenRCA) tasks, writes predictions in OpenRCA's format, fetches each scenario's answer keys and telemetry, and scores predictions with the official OpenRCA evaluator.
+OpenRCA benchmark support for evorca. It reads [OpenRCA](https://github.com/microsoft/OpenRCA) tasks, lists the root cause candidates of each scenario, writes predictions in OpenRCA's format, fetches each scenario's answer keys and telemetry, and scores predictions with the official OpenRCA evaluator.
 
 ## Scope
 
 - Naming the four OpenRCA scenarios, `bank`, `telecom`, `market-cloudbed-1`, and `market-cloudbed-2`, after the Bank, Telecom, Market/cloudbed-1, and Market/cloudbed-2 systems, and reading the tasks in each scenario's `query.csv`.
+- Listing the root cause components and reasons that RCA-Agent's prompt offers for each scenario.
 - Converting a `Diagnosis` from `@evorca/core` to and from OpenRCA's prediction JSON. OpenRCA datetimes are wall-clock times at UTC+8.
 - Fetching each scenario's answer keys, `query.csv` and `record.csv`, and its telemetry, the logs, metrics, and traces, from the published dataset archives. Each file must match its size and SHA-256 in `src/pinned.ts` or `src/pinned-telemetry.json`.
 - Scoring a prediction CSV with OpenRCA's own `main/evaluate.py` at a pinned commit, in the Python environment locked in `evaluator/uv.lock`.
@@ -25,6 +26,7 @@ OpenRCA benchmark support for evorca. It reads [OpenRCA](https://github.com/micr
 
 - `openRcaScenarios` maps each scenario slug, such as `market-cloudbed-1`, to its OpenRCA system, such as `Market/cloudbed-1`. `OpenRcaScenario` is one slug. Each scenario's files live in `<dataDir>/<scenario>/`, where `dataDir` is the benchmark's data directory, `data/benchmarks/openrca` in this repository.
 - `readTasks(scenario, dataDir)` returns the tasks in `<dataDir>/<scenario>/query.csv` as `OpenRcaTask` values, in file order. A task's `TaskIndex`, `task_1` to `task_7`, decides which root cause fields the answer needs.
+- `openRcaCandidates` maps each scenario slug to its `Candidates`, the `components` and `reasons` that an answer can name. See [Show an agent the candidates](#show-an-agent-the-candidates).
 - `formatPrediction(diagnosis)` and `parsePrediction(raw)` convert between a `Diagnosis` and OpenRCA's prediction JSON. `parsePrediction` returns `undefined` for text that is not a valid prediction, so only `{}` parses as no causes.
 - `writePredictions(tasks, diagnoses)` returns the prediction CSV for one scenario, with one row per task in the order of `tasks`.
 
@@ -76,6 +78,21 @@ await writeFile("predictions.csv", writePredictions(tasks, diagnoses));
 ```
 
 A task with no entry in `diagnoses` gets the empty prediction `{}`, which scores 0.
+
+## Show an agent the candidates
+
+RCA-Agent's prompt for each system lists every root cause component and reason that an answer can name. The evaluator compares names exactly, so an agent with these lists never loses a point to a name that the system does not use. An agent without them must find the names in the telemetry, which is a harder task. Whether an agent sees the lists is part of its setup, so state it with every result. RCA-Agent always sees them.
+
+`openRcaCandidates` holds the lists:
+
+| Scenario          | Components | Reasons |
+| ----------------- | ---------: | ------: |
+| bank              |         14 |       8 |
+| telecom           |         43 |       5 |
+| market-cloudbed-1 |         56 |      15 |
+| market-cloudbed-2 |         56 |      15 |
+
+`pnpm --filter @evorca/openrca extract-candidates` runs the maintainer script `scripts/extract-candidates.ts`. The script reads the lists from `rca/baseline/rca_agent/prompt/basic_prompt_<System>.py` at the commit in `src/pinned.ts` and writes them to `src/candidates.json`. Both Market scenarios read `basic_prompt_Market.py`. The prompts end some names with a space, and the script trims them. When the answer keys are in `data/benchmarks/openrca/`, `src/candidates.test.ts` checks that the lists include every component and reason in each scenario's `record.csv`.
 
 ## Fetch the data
 
