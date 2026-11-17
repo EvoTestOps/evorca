@@ -1,5 +1,5 @@
 /**
- * Reads OpenRCA tasks from each system's `query.csv`.
+ * Reads OpenRCA tasks from each scenario's `query.csv`.
  *
  * A `query.csv` row holds a task index, the instruction for the agent, and the
  * scoring points that grade the answer. A task leaves out the scoring points,
@@ -8,19 +8,8 @@
  * @module
  */
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
 import { parseCsv } from "./csv.js";
-
-/** The four OpenRCA systems. Each name is also the system's directory in the dataset. */
-export const openRcaSystems = [
-  "Bank",
-  "Telecom",
-  "Market/cloudbed-1",
-  "Market/cloudbed-2",
-] as const;
-
-/** The name of one OpenRCA system, such as `Market/cloudbed-1`. */
-export type OpenRcaSystem = (typeof openRcaSystems)[number];
+import { scenarioPath, type OpenRcaScenario } from "./scenarios.js";
 
 const taskIndices = ["task_1", "task_2", "task_3", "task_4", "task_5", "task_6", "task_7"] as const;
 
@@ -38,7 +27,7 @@ export type TaskIndex = (typeof taskIndices)[number];
  * row. `instruction` tells the agent the time range and the number of failures.
  */
 export type OpenRcaTask = {
-  readonly system: OpenRcaSystem;
+  readonly scenario: OpenRcaScenario;
   readonly row: number;
   readonly taskIndex: TaskIndex;
   readonly instruction: string;
@@ -56,15 +45,18 @@ export function parseTaskIndex(value: string): TaskIndex {
 }
 
 /**
- * Reads the tasks in `<dataDir>/<system>/query.csv`, one per row, in file order.
+ * Reads the tasks in `<dataDir>/<scenario>/query.csv`, one per row, in file order.
  *
  * @throws Error if `query.csv` cannot be read, lacks the `task_index`,
  *   `instruction`, or `scoring_points` column, or holds an unknown task index.
  */
-export async function readTasks(system: OpenRcaSystem, dataDir: string): Promise<OpenRcaTask[]> {
-  const text = await readFile(join(dataDir, system, "query.csv"), "utf8");
+export async function readTasks(
+  scenario: OpenRcaScenario,
+  dataDir: string,
+): Promise<OpenRcaTask[]> {
+  const text = await readFile(scenarioPath(dataDir, scenario, "query.csv"), "utf8");
   return parseCsv(text, ["task_index", "instruction", "scoring_points"]).map((record, row) => ({
-    system,
+    scenario,
     row,
     taskIndex: parseTaskIndex(record.task_index),
     instruction: record.instruction,
