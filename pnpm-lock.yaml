@@ -31,6 +31,9 @@ importers:
 
   packages/cli:
     dependencies:
+      '@evorca/core':
+        specifier: workspace:*
+        version: link:../core
       '@evorca/openrca':
         specifier: workspace:*
         version: link:../openrca
