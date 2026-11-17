@@ -225,3 +225,112 @@ describe("fetchOpenRcaData", () => {
     ).rejects.toThrow(server.url);
   });
 });
+
+describe("fetchOpenRcaData with an archive on disk", () => {
+  const entries = {
+    "Telecom/query.csv": query,
+    "Telecom/record.csv": record,
+    "Telecom/telemetry/2020_04_11/metric/metric_service.csv": metric,
+    "Telecom/telemetry/2020_04_11/trace/trace_span.csv": trace,
+  };
+
+  async function setUpLocal() {
+    const [dataDir, downloads] = await Promise.all([
+      mkdtemp(join(tmpdir(), "openrca-")),
+      mkdtemp(join(tmpdir(), "openrca-downloads-")),
+    ]);
+    onTestFinished(() => rm(dataDir, { recursive: true }));
+    onTestFinished(() => rm(downloads, { recursive: true }));
+    const zip = await zipOf({
+      ...entries,
+      "Telecom/.DS_Store": Buffer.from("finder"),
+      "Telecom/telemetry/2020_04_11/.DS_Store": Buffer.from("finder"),
+    });
+    const archivePath = join(downloads, "Telecom.zip");
+    await writeFile(archivePath, zip);
+    const server = await serve(zip);
+    return {
+      dataDir,
+      downloads,
+      archivePath,
+      server,
+      archives: {
+        ...driveArchives,
+        Telecom: { ...driveArchives.Telecom, url: server.url, bytes: zip.length },
+      },
+      files: Object.fromEntries(
+        Object.entries(entries).map(([entry, bytes]) => [entry, pin(bytes)]),
+      ),
+    };
+  }
+
+  const pathIn = (dataDir: string, entry: string) =>
+    join(dataDir, "telecom", entry.slice("Telecom/".length));
+
+  it("writes each pinned file from the archive on disk and sends no request", async () => {
+    const { dataDir, archivePath, server, archives, files } = await setUpLocal();
+
+    const progress = await fetchAll({
+      scenarios: ["telecom"],
+      dataDir,
+      archives,
+      files,
+      localArchives: [archivePath],
+    });
+
+    expect(progress).toEqual(
+      Object.entries(entries).flatMap(([entry, contents]) => [
+        { status: "fetching", path: pathIn(dataDir, entry), ...pin(contents) },
+        { status: "fetched", path: pathIn(dataDir, entry), ...pin(contents) },
+      ]),
+    );
+    expect(await filesIn(dataDir)).toEqual(
+      Object.keys(entries)
+        .map((entry) => pathIn(dataDir, entry))
+        .sort(),
+    );
+    for (const [entry, contents] of Object.entries(entries)) {
+      const written = await readFile(pathIn(dataDir, entry));
+      expect(written).toEqual(contents);
+      expect(createHash("sha256").update(written).digest("hex")).toBe(files[entry]?.sha256);
+    }
+    expect(server.requests()).toBe(0);
+  });
+
+  it("rejects a file whose hash differs from the pinned hash and keeps no file or .tmp for it", async () => {
+    const { dataDir, archivePath, archives, files } = await setUpLocal();
+    const metricEntry = "Telecom/telemetry/2020_04_11/metric/metric_service.csv";
+    const wrong = { ...files, [metricEntry]: pin(Buffer.from("other")) };
+
+    await expect(
+      fetchAll({
+        scenarios: ["telecom"],
+        dataDir,
+        archives,
+        files: wrong,
+        localArchives: [archivePath],
+      }),
+    ).rejects.toThrow(`${metricEntry}: the download is not the published file`);
+    expect(await filesIn(dataDir)).toEqual([
+      pathIn(dataDir, "Telecom/query.csv"),
+      pathIn(dataDir, "Telecom/record.csv"),
+    ]);
+  });
+
+  it("rejects an archive whose size matches no pinned archive and names the archives", async () => {
+    const { dataDir, downloads, archives, files } = await setUpLocal();
+    const other = await zipOf({ "Telecom/query.csv": query });
+    const otherPath = join(downloads, "other.zip");
+    await writeFile(otherPath, other);
+
+    await expect(
+      fetchAll({ scenarios: ["telecom"], dataDir, archives, files, localArchives: [otherPath] }),
+    ).rejects.toHaveProperty(
+      "message",
+      `${otherPath} has ${other.length} bytes, but the OpenRCA archives are ` +
+        `Bank.zip (${archives.Bank.bytes} bytes), Telecom.zip (${archives.Telecom.bytes} bytes), ` +
+        `and Market.zip (${archives.Market.bytes} bytes)`,
+    );
+    expect(await filesIn(dataDir)).toEqual([]);
+  });
+});

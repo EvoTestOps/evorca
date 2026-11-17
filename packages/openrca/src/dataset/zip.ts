@@ -1,39 +1,53 @@
 /**
- * Reads files out of a zip archive on a web server without downloading the
- * whole archive. A zip archive ends with a directory of its entries, so a reader
- * needs only that directory and the entries it wants, which HTTP Range requests
- * fetch. Reads of up to 1 MiB share one buffered response, so the many small
- * reads that yauzl makes cost one request. A larger read streams from its own
- * response, so memory use does not grow with the size of an entry.
+ * Reads files out of a zip archive on disk or on a web server. A zip archive
+ * ends with a directory of its entries, so a reader needs only that directory
+ * and the entries it wants. On a web server, HTTP Range requests fetch only
+ * those parts of the archive. There, reads of up to 1 MiB share one buffered
+ * response, so the many small reads that yauzl makes cost one request. A
+ * larger read streams from its own response, so memory use does not grow with
+ * the size of an entry.
  *
  * @module
  */
+import { createReadStream } from "node:fs";
 import { Readable } from "node:stream";
 import { buffer } from "node:stream/consumers";
 import yauzl from "yauzl";
 
 const windowBytes = 1024 * 1024;
 
-/** A zip archive on a web server whose directory has been read. */
-export type RemoteZip = {
+/**
+ * Where a zip archive's bytes come from: a web server at `url` that answers
+ * HTTP Range requests with a `content-range` header, or a file at `path`.
+ * `bytes` is the size of the archive.
+ */
+export type ZipSource = { readonly bytes: number } & (
+  { readonly url: string } | { readonly path: string }
+);
+
+/** A zip archive whose directory has been read. */
+export type Zip = {
   readonly fileNames: readonly string[];
   open(fileName: string): Promise<Readable>;
 };
 
 /**
- * Reads the directory of a zip archive over HTTP. `fileNames` lists its
- * entries, and `open` streams the uncompressed contents of one entry.
+ * Reads the directory of a zip archive. `fileNames` lists its entries, and
+ * `open` streams the uncompressed contents of one entry.
  *
- * @param url - The archive's URL. Its server must answer Range requests with a
- *   `content-range` header.
- * @param bytes - The size of the archive. Every response must report this
- *   total, so a changed archive fails instead of returning other bytes.
+ * @param source - The archive. Every response of a web server must report its
+ *   `bytes` as the total, so a changed archive fails instead of returning other
+ *   bytes.
  * @throws Error if a response does not cover the requested range of a
  *   `bytes`-long file. `open` and its stream fail in the same way, and `open`
  *   also fails if the archive has no entry named `fileName`.
  */
-export async function openRemoteZip(url: string, bytes: number): Promise<RemoteZip> {
-  const zip = await yauzl.fromRandomAccessReaderPromise(new RemoteFile(url, bytes), bytes, {
+export async function openZip(source: ZipSource): Promise<Zip> {
+  const [location, reader] =
+    "url" in source
+      ? [source.url, new RemoteFile(source.url, source.bytes)]
+      : [source.path, new LocalFile(source.path)];
+  const zip = await yauzl.fromRandomAccessReaderPromise(reader, source.bytes, {
     lazyEntries: true,
     autoClose: false,
   });
@@ -43,10 +57,20 @@ export async function openRemoteZip(url: string, bytes: number): Promise<RemoteZ
     fileNames: [...entries.keys()],
     async open(fileName) {
       const entry = entries.get(fileName);
-      if (entry === undefined) throw new Error(`${fileName} is not in ${url}`);
+      if (entry === undefined) throw new Error(`${fileName} is not in ${location}`);
       return zip.openReadStreamPromise(entry);
     },
   };
+}
+
+class LocalFile extends yauzl.RandomAccessReader {
+  constructor(readonly path: string) {
+    super();
+  }
+
+  override _readStreamForRange(start: number, end: number): Readable {
+    return createReadStream(this.path, { start, end: end - 1 });
+  }
 }
 
 class RemoteFile extends yauzl.RandomAccessReader {

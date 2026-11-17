@@ -12,7 +12,7 @@
 import { writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { measure } from "../src/dataset/fetch.js";
-import { openRemoteZip } from "../src/dataset/remote-zip.js";
+import { openZip } from "../src/dataset/zip.js";
 import { driveArchives, type FileDigest } from "../src/pinned.js";
 import { openRcaScenarios } from "../src/scenarios.js";
 
@@ -24,7 +24,7 @@ const telemetryFile = new RegExp(
 
 const pinned = await Promise.all(
   Object.values(driveArchives).map(async (archive) => {
-    const zip = await openRemoteZip(archive.url, archive.bytes);
+    const zip = await openZip(archive);
     const files: [string, FileDigest][] = [];
     for (const fileName of zip.fileNames.filter((name) => telemetryFile.test(name))) {
       const file = await measure(await zip.open(fileName));

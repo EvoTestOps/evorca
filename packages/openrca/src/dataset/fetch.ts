@@ -1,15 +1,17 @@
 /**
  * Downloads the files of OpenRCA scenarios from the published dataset archives:
  * the answer keys, `query.csv` and `record.csv`, and the telemetry, which is
- * almost all of the 69 GB that the archives hold once unpacked. Each file
- * streams through SHA-256 and never sits whole in memory. A file already on
- * disk that matches stays, so a second run downloads nothing.
+ * almost all of the 69 GB that the archives hold once unpacked. It reads the
+ * archives on Google Drive, or the copies on disk that a person downloaded
+ * when Drive refused. Each file streams through SHA-256 and never sits whole in
+ * memory. A file already on disk that matches stays, so a second run downloads
+ * nothing.
  *
  * @module
  */
 import { createHash } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
-import { mkdir, rename, statfs } from "node:fs/promises";
+import { mkdir, rename, stat, statfs } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -23,7 +25,7 @@ import {
 } from "../pinned.js";
 import { openRcaScenarios, type OpenRcaScenario } from "../scenarios.js";
 import { removeOnDispose } from "../temp.js";
-import { openRemoteZip, type RemoteZip } from "./remote-zip.js";
+import { openZip, type Zip, type ZipSource } from "./zip.js";
 
 /**
  * One step of fetchOpenRcaData for the file at `path`: the file is `present`,
@@ -52,20 +54,26 @@ type Target = FileDigest & {
  *
  * @param files - The pinned files by their path in the archives. Each scenario
  *   gets the files under its system's directory.
- * @throws Error if a file on disk does not match or the missing files do not
- *   fit, before any download, or if a download fails or does not match.
+ * @param localArchives - The paths of archives on disk to read instead of
+ *   `archives`. The size of each path picks the archive it replaces.
+ * @throws Error if a local archive has the size of none of `archives`, a file
+ *   on disk does not match, or the missing files do not fit, before any
+ *   download, or if a download fails or does not match.
  */
 export async function* fetchOpenRcaData({
   scenarios,
   dataDir,
   archives = driveArchives,
   files = { ...answerKeyFiles, ...telemetryFiles },
+  localArchives = [],
 }: {
   readonly scenarios: readonly OpenRcaScenario[];
   readonly dataDir: string;
   readonly archives?: Readonly<Record<keyof typeof driveArchives, Archive>>;
   readonly files?: Readonly<Record<string, FileDigest>>;
+  readonly localArchives?: readonly string[];
 }): AsyncGenerator<FileProgress, void, undefined> {
+  const onDisk = await matchArchives(localArchives, archives);
   const missing: Target[] = [];
   for (const scenario of new Set(scenarios)) {
     for (const target of targetsOf(scenario, dataDir, files)) {
@@ -83,7 +91,7 @@ export async function* fetchOpenRcaData({
     missing.reduce((bytes, target) => bytes + target.bytes, 0),
   );
   for (const [name, targets] of Map.groupBy(missing, (target) => target.archive)) {
-    const zip = await openRemoteZip(archives[name].url, archives[name].bytes);
+    const zip = await openZip(onDisk.get(name) ?? archives[name]);
     for (const target of targets) {
       yield progress("fetching", target);
       await download(zip, target);
@@ -101,6 +109,25 @@ export async function measure(chunks: AsyncIterable<Buffer>): Promise<FileDigest
     bytes += chunk.length;
   }
   return { bytes, sha256: hash.digest("hex") };
+}
+
+async function matchArchives(
+  paths: readonly string[],
+  archives: Readonly<Record<string, Archive>>,
+): Promise<Map<string, ZipSource>> {
+  const named = Object.entries(archives);
+  const matched = new Map<string, ZipSource>();
+  for (const path of paths) {
+    const { size } = await stat(path);
+    const [name] = named.find(([, archive]) => archive.bytes === size) ?? [];
+    if (name === undefined) {
+      const sizes = named.map(([name, { bytes }]) => `${name}.zip (${bytes} bytes)`);
+      const expected = new Intl.ListFormat("en").format(sizes);
+      throw new Error(`${path} has ${size} bytes, but the OpenRCA archives are ${expected}`);
+    }
+    matched.set(name, { path, bytes: size });
+  }
+  return matched;
 }
 
 function targetsOf(
@@ -148,7 +175,7 @@ function gb(bytes: number): string {
   return (bytes / 1e9).toFixed(2);
 }
 
-async function download(zip: RemoteZip, target: Target): Promise<void> {
+async function download(zip: Zip, target: Target): Promise<void> {
   await mkdir(dirname(target.path), { recursive: true });
   await using temp = removeOnDispose(`${target.path}.tmp`);
   const downloaded = await copyMeasured(await zip.open(target.entry), temp.path);
