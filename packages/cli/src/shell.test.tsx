@@ -23,15 +23,16 @@ const secondExample = "Find the root cause of the 5xx burst on payments";
 let setup: TestRendererSetup;
 let clock: ManualClock;
 let onExit: () => void;
+let wallTime: Date;
 
 async function open(width = 100, height = 30, directory = "~/incidents") {
   clock = new ManualClock();
   onExit = vi.fn();
-  setup = await testRender(<Shell directory={directory} onExit={onExit} />, {
-    width,
-    height,
-    clock,
-  });
+  wallTime = new Date(2026, 10, 17, 14, 5, 12);
+  setup = await testRender(
+    <Shell directory={directory} wallTime={() => wallTime} onExit={onExit} />,
+    { width, height, clock },
+  );
   await setup.renderOnce();
   return setup.captureCharFrame();
 }
@@ -243,10 +244,23 @@ describe("Shell", () => {
 
     expect(frame).not.toContain("•");
     expect(frame).not.toContain("autonomous incident investigation");
-    expect(frame).toMatch(/┃ +hello +\n +┃ *\n *\n +┃ +No agent is connected yet\./);
+    expect(frame).toMatch(
+      /^ +14:05:12 +you +hello +\n +14:05:12 +evorca +No agent is connected yet\. +$/m,
+    );
     expect(frame).toMatch(/^ +› +\n/m);
     expect(frame).toContain("enter send   /help commands   ctrl+c exit");
     expect(frame).toMatch(new RegExp(`~/incidents +evorca v${packageJson.version}`));
+  });
+
+  it("stamps each entry with the local time when it was added", async () => {
+    await open();
+    await enter("hello");
+    wallTime = new Date(2026, 10, 17, 9, 3, 7);
+    const frame = await enter("/help");
+
+    expect(frame).toMatch(/^ +14:05:12 +you +hello +$/m);
+    expect(frame).toMatch(/^ +09:03:07 +you +\/help +$/m);
+    expect(frame).toMatch(/^ +09:03:07 +evorca +\/help {2}List the commands +$/m);
   });
 
   it("stays home on a blank line", async () => {
@@ -255,16 +269,18 @@ describe("Shell", () => {
     const frame = await enter("   ");
 
     expect(leds()).toEqual(wordmark);
-    expect(frame).not.toContain("┃");
+    expect(frame).not.toMatch(/ you /);
   });
 
-  it("lists the commands for /help", async () => {
+  it("lists the commands for /help, the second line under the first", async () => {
     await open();
-    const frame = await enter("/help");
+    const lines = (await enter("/help")).split("\n");
+    const first = lines.findIndex((line) => line.includes("/help  List the commands"));
 
-    expect(frame).toMatch(/┃ +\/help +\n/);
-    expect(frame).toContain("/help  List the commands");
-    expect(frame).toContain("/exit  Exit evorca");
+    expect(first).toBeGreaterThan(-1);
+    expect(lines[first + 1]?.indexOf("/exit  Exit evorca")).toBe(
+      lines[first]?.indexOf("/help  List the commands"),
+    );
   });
 
   it("names an unknown command", async () => {
@@ -276,11 +292,12 @@ describe("Shell", () => {
 
   it("keeps the newest entry in view", async () => {
     await open();
-    for (const word of ["one", "two", "three", "four", "five", "six"]) await enter(word);
+    const words = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
+    for (const word of words) await enter(word);
     const frame = setup.captureCharFrame();
 
-    expect(frame).not.toMatch(/┃ +one /);
-    expect(frame).toMatch(/┃ +six /);
+    expect(frame).not.toMatch(/ you +one /);
+    expect(frame).toMatch(/ you +ten /);
   });
 
   it("schedules no work while nothing moves", async () => {

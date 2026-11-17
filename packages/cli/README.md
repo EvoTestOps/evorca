@@ -51,7 +51,7 @@ You need Node 26.4 or later, because OpenTUI calls its native library through `n
 pnpm evorca
 ```
 
-The shell opens on the home screen. The wordmark is a panel of dots, like an LED display. Its dots switch on one at a time, and every few seconds a few of them dim for a moment. While the input line is empty, its placeholder types out example questions. Type a message and press Enter. After the first message, the transcript replaces the home screen. Each line you send appears in the transcript, followed by the reply. These commands are available:
+The shell opens on the home screen. The wordmark is a panel of dots, like an LED display. Its dots switch on one at a time, and every few seconds a few of them dim for a moment. While the input line is empty, its placeholder types out example questions. Type a message and press Enter. After the first message, the transcript replaces the home screen. The transcript is a log. Each line you send appears in it, followed by the reply, and each entry starts with the local time and `you` or `evorca`. These commands are available:
 
 - `/help` lists the commands.
 - `/exit` closes evorca. ctrl+c does the same.

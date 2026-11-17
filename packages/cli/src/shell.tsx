@@ -2,8 +2,9 @@
  * The interactive shell that `evorca` opens without arguments. It starts on a
  * home screen with the wordmark and the input line in the middle. Once a line
  * adds to the transcript, it shows the session view instead, with the
- * transcript above an input line pinned to the bottom. It applies the outcome
- * that `commands.ts` returns for each line, and draws only grays.
+ * transcript as a log with timestamps above an input line pinned to the
+ * bottom. It applies the outcome that `commands.ts` returns for each line, and
+ * draws only grays.
  *
  * One clock drives the animations in `motion.ts`. It ticks while one of them
  * moves, sleeps until the next one moves, and stops when none will.
@@ -17,12 +18,7 @@
 // @jsxImportSource @opentui/react
 import { homedir } from "node:os";
 import { sep } from "node:path";
-import {
-  createCliRenderer,
-  TextAttributes,
-  type BorderCharacters,
-  type InputRenderable,
-} from "@opentui/core";
+import { createCliRenderer, TextAttributes, type InputRenderable } from "@opentui/core";
 import {
   createRoot,
   useAnimationTick,
@@ -48,19 +44,13 @@ import { panel } from "./wordmark.js";
 /** The grays the shell draws with, each with equal red, green, and blue. */
 export const palette = {
   background: "#0a0a0a",
-  panel: "#161616",
   border: "#333333",
   muted: "#707070",
   text: "#c8c8c8",
   bright: "#f4f4f4",
 } as const;
 
-type Voice = {
-  readonly bar: string;
-  readonly fg: string;
-  readonly panel?: string;
-  readonly paddingY: number;
-};
+type Voice = { readonly speaker: string; readonly text: string };
 
 type View =
   { readonly view: "home" } | { readonly view: "session"; readonly transcript: readonly Entry[] };
@@ -81,23 +71,11 @@ const hints = [
 const separator = "   ";
 const dot = "•";
 const wordmarkWidth = (panel[0]?.length ?? 0) * 2 - 1;
-const bar: BorderCharacters = {
-  topLeft: "",
-  topRight: "",
-  bottomLeft: "",
-  bottomRight: "",
-  horizontal: " ",
-  vertical: "┃",
-  topT: "",
-  bottomT: "",
-  leftT: "",
-  rightT: "",
-  cross: "",
-};
 const voices: Readonly<Record<Entry["role"], Voice>> = {
-  you: { bar: palette.bright, fg: palette.bright, panel: palette.panel, paddingY: 1 },
-  evorca: { bar: palette.muted, fg: palette.text, paddingY: 0 },
+  you: { speaker: palette.bright, text: palette.bright },
+  evorca: { speaker: palette.muted, text: palette.text },
 };
+const speakerWidth = Math.max(...Object.keys(voices).map((role) => role.length));
 const inks: Readonly<Record<Led, string>> = {
   off: palette.border,
   dim: palette.muted,
@@ -115,15 +93,27 @@ export async function openShell(): Promise<void> {
     backgroundColor: palette.background,
   });
   createRoot(renderer).render(
-    <Shell directory={tildify(process.cwd())} onExit={() => renderer.destroy()} />,
+    <Shell
+      directory={tildify(process.cwd())}
+      wallTime={() => new Date()}
+      onExit={() => renderer.destroy()}
+    />,
   );
 }
 
-/** The props of {@link Shell}. `directory` is the working directory as the user should read it. */
-export type ShellProps = { readonly directory: string; readonly onExit: () => void };
+/**
+ * The props of {@link Shell}. `directory` is the working directory as the user
+ * should read it, and `wallTime` returns the local time to stamp each entry
+ * of the transcript with.
+ */
+export type ShellProps = {
+  readonly directory: string;
+  readonly wallTime: () => Date;
+  readonly onExit: () => void;
+};
 
 /** The whole screen. It calls `onExit` on `/exit` and on ctrl+c. */
-export function Shell({ directory, onExit }: ShellProps) {
+export function Shell({ directory, wallTime, onExit }: ShellProps) {
   const renderer = useRenderer();
   const { width } = useTerminalDimensions();
   const [start] = useState(() => renderer.clock.now());
@@ -174,7 +164,7 @@ export function Shell({ directory, onExit }: ShellProps) {
 
   function onSubmit(line: string) {
     if (input.current) input.current.value = "";
-    const outcome = submit(line);
+    const outcome = submit(line, wallTime());
     if (outcome.kind === "exit") return onExit();
     if (outcome.entries.length === 0) return;
     setView((view) => ({
@@ -274,15 +264,17 @@ const Transcript = memo(function Transcript({ entries }: { readonly entries: rea
         return (
           <box
             key={index}
-            border={["left"]}
-            customBorderChars={bar}
-            borderColor={voice.bar}
-            backgroundColor={voice.panel}
-            paddingX={2}
-            paddingY={voice.paddingY}
-            marginTop={index > 0 ? 1 : 0}
+            flexDirection="row"
+            gap={2}
+            marginTop={entry.role === "you" && index > 0 ? 1 : 0}
           >
-            <text fg={voice.fg}>{entry.text}</text>
+            <text fg={palette.muted} flexShrink={0}>
+              {entry.at.toTimeString().slice(0, 8)}
+            </text>
+            <text fg={voice.speaker} flexShrink={0}>
+              {entry.role.padEnd(speakerWidth)}
+            </text>
+            <text fg={voice.text}>{entry.text}</text>
           </box>
         );
       })}
