@@ -9,15 +9,20 @@
  * `evorca reproduce` downloads only the answer keys of those scenarios, checks
  * that evorca reproduces the scores that the benchmark publishes, and keeps the
  * scorer's checkout and environment in `.cache/` at the repository root.
+ * `evorca evaluate` runs an agent from `agents/` on those scenarios, one Docker
+ * container per task, scores its answers, and keeps each run in
+ * `data/runs/<benchmark>/<scenario>/`.
  *
  * @module
  */
+import { randomInt } from "node:crypto";
 import { relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { openRcaScenarios } from "@evorca/openrca";
 import { answerKeyFiles, fetchOpenRcaData, type FileProgress } from "@evorca/openrca/dataset";
-import { reproduceOpenRca } from "./openrca.js";
+import { agents } from "./agents.js";
+import { evaluateOpenRca, reproduceOpenRca } from "./openrca.js";
 
 const benchmarks = {
   openrca: {
@@ -25,6 +30,7 @@ const benchmarks = {
     answerKeys: answerKeyFiles,
     fetch: fetchOpenRcaData,
     reproduce: reproduceOpenRca,
+    evaluate: evaluateOpenRca,
   },
 };
 
@@ -33,8 +39,11 @@ type Benchmark = (typeof benchmarks)[keyof typeof benchmarks];
 type Invocation = {
   readonly benchmark: Benchmark;
   readonly scenarios: readonly (keyof Benchmark["scenarios"])[];
+  readonly agent: string | undefined;
   readonly dataDir: string;
   readonly cacheDir: string;
+  readonly runsDir: string;
+  readonly agentsDir: string;
 };
 
 const commands = {
@@ -45,11 +54,16 @@ const commands = {
     await printProgress(benchmark.fetch({ scenarios, dataDir, files: benchmark.answerKeys }));
     if (!(await benchmark.reproduce({ scenarios, dataDir, cacheDir }))) process.exitCode = 1;
   },
+  async evaluate({ benchmark, scenarios, agent, ...dirs }: Invocation) {
+    const options = { ...dirs, scenarios, agent: choose(agents, agent, "agent"), seed: readSeed() };
+    if (!(await benchmark.evaluate(options))) process.exitCode = 1;
+  },
 };
 
 const usage = [
   "Usage: evorca",
   `       evorca <${Object.keys(commands).join("|")}> --benchmark=<benchmark> [--scenario=<scenario>...]`,
+  "                [--agent=<agent>]",
 ].join("\n");
 
 const { positionals, values } = parseCommandLine();
@@ -61,11 +75,7 @@ if (positionals.length === 0 && Object.keys(values).length === 0) {
   const [command] = positionals;
   if (positionals.length !== 1 || !isKeyOf(commands, command)) fail(usage);
 
-  const name = values.benchmark;
-  if (!isKeyOf(benchmarks, name)) {
-    const problem = name === undefined ? "Missing --benchmark" : `Unknown benchmark: ${name}`;
-    fail(`${problem}. Choose from: ${Object.keys(benchmarks).join(", ")}`);
-  }
+  const name = choose(benchmarks, values.benchmark, "benchmark");
   const benchmark = benchmarks[name];
 
   const known = Object.keys(benchmark.scenarios);
@@ -79,8 +89,11 @@ if (positionals.length === 0 && Object.keys(values).length === 0) {
   await commands[command]({
     benchmark,
     scenarios,
+    agent: values.agent,
     dataDir: fileURLToPath(new URL(`data/benchmarks/${name}/`, root)),
     cacheDir: fileURLToPath(new URL(".cache/", root)),
+    runsDir: fileURLToPath(new URL(`data/runs/${name}/`, root)),
+    agentsDir: fileURLToPath(new URL("agents/", root)),
   });
 }
 
@@ -102,11 +115,27 @@ function parseCommandLine() {
       options: {
         benchmark: { type: "string" },
         scenario: { type: "string", multiple: true },
+        agent: { type: "string" },
       },
     });
   } catch (error: unknown) {
     return fail(`${error instanceof Error ? error.message : error}\n${usage}`);
   }
+}
+
+function readSeed(): number {
+  const seed = process.env.EVORCA_SEED;
+  if (seed === undefined) return randomInt(2 ** 32);
+  if (!/^\d+$/.test(seed) || !Number.isSafeInteger(Number(seed))) {
+    fail(`EVORCA_SEED must be a non-negative integer, not ${JSON.stringify(seed)}.`);
+  }
+  return Number(seed);
+}
+
+function choose<T extends object>(table: T, key: string | undefined, option: string) {
+  if (isKeyOf(table, key)) return key;
+  const problem = key === undefined ? `Missing --${option}` : `Unknown ${option}: ${key}`;
+  return fail(`${problem}. Choose from: ${Object.keys(table).join(", ")}`);
 }
 
 function isKeyOf<T extends object>(table: T, key: string | undefined): key is keyof T & string {

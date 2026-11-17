@@ -26,11 +26,12 @@ pnpm check
 
 `pnpm check` runs the same format check, type check, tests, and build as CI. `pnpm format` fixes formatting.
 
-| Package                                         | Purpose                                                                           |
-| ----------------------------------------------- | --------------------------------------------------------------------------------- |
-| [`@evorca/cli`](packages/cli/README.md)         | The `evorca` command, which `pnpm evorca` runs from the repository root.          |
-| [`@evorca/core`](packages/core/README.md)       | The domain types that every other package shares.                                 |
-| [`@evorca/openrca`](packages/openrca/README.md) | Connects evorca to the [OpenRCA](https://github.com/microsoft/OpenRCA) benchmark. |
+| Package                                           | Purpose                                                                           |
+| ------------------------------------------------- | --------------------------------------------------------------------------------- |
+| [`@evorca/agent-random`](agents/random/README.md) | The `random` agent, the chance-level floor of an evaluation.                      |
+| [`@evorca/cli`](packages/cli/README.md)           | The `evorca` command, which `pnpm evorca` runs from the repository root.          |
+| [`@evorca/core`](packages/core/README.md)         | The domain types that every other package shares.                                 |
+| [`@evorca/openrca`](packages/openrca/README.md)   | Connects evorca to the [OpenRCA](https://github.com/microsoft/OpenRCA) benchmark. |
 
 ## Contributing
 

@@ -29,10 +29,33 @@ describe("evorca", () => {
     expect(code).toBe(1);
     expect(stderr).toContain("fetch");
     expect(stderr).toContain("reproduce");
+    expect(stderr).toContain("evaluate");
   });
 });
 
-describe.each(["fetch", "reproduce"])("evorca %s", (command) => {
+describe("evorca evaluate", () => {
+  it("exits with code 1 and lists the agents for an unknown agent", async () => {
+    const { code, stderr } = await evorca(
+      "evaluate",
+      "--benchmark=openrca",
+      "--scenario=telecom",
+      "--agent=nope",
+    );
+
+    expect(code).toBe(1);
+    expect(stderr).toContain("Unknown agent: nope");
+    expect(stderr).toContain("random");
+  });
+
+  it("exits with code 1 and lists the agents without --agent", async () => {
+    const { code, stderr } = await evorca("evaluate", "--benchmark=openrca", "--scenario=telecom");
+
+    expect(code).toBe(1);
+    expect(stderr).toContain("random");
+  });
+});
+
+describe.each(["fetch", "reproduce", "evaluate"])("evorca %s", (command) => {
   it("exits with code 1 and lists the benchmarks for an unknown benchmark", async () => {
     const { code, stderr } = await evorca(command, "--benchmark=nope");
 
