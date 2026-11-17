@@ -29,6 +29,7 @@ pnpm check
 | Package                                           | Purpose                                                                           |
 | ------------------------------------------------- | --------------------------------------------------------------------------------- |
 | [`@evorca/agent-random`](agents/random/README.md) | The `random` agent, the chance-level floor of an evaluation.                      |
+| [`@evorca/agent-react`](agents/react/README.md)   | The `react` agent, the baseline without self-improvement.                         |
 | [`@evorca/cli`](packages/cli/README.md)           | The `evorca` command, which `pnpm evorca` runs from the repository root.          |
 | [`@evorca/core`](packages/core/README.md)         | The domain types that every other package shares.                                 |
 | [`@evorca/openrca`](packages/openrca/README.md)   | Connects evorca to the [OpenRCA](https://github.com/microsoft/OpenRCA) benchmark. |
