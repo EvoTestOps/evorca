@@ -4,7 +4,7 @@ The `evorca` command. From the repository root, `pnpm evorca` runs it without a 
 
 ## Scope
 
-- An interactive shell in the terminal, built with [OpenTUI](https://github.com/anomalyco/opentui), which `evorca` opens when it runs without arguments. It shows the evorca banner, the version and the working directory, a transcript of the session, and an input box at the bottom of the screen.
+- An interactive shell in the terminal, built with [OpenTUI](https://github.com/anomalyco/opentui), which `evorca` opens when it runs without arguments. It opens on a home screen with the evorca wordmark and an input box, then shows a transcript of the session above the input box. A footer shows the working directory and the version.
 - The slash commands `/help` and `/exit`.
 - `evorca fetch`, which downloads the answer keys and the telemetry of a benchmark's scenarios into `data/benchmarks/<benchmark>/<scenario>/` at the repository root.
 - `evorca reproduce`, which downloads only the answer keys and checks that evorca reproduces the scores that a benchmark publishes. It keeps the scorer's checkout and environment in `.cache/` at the repository root.
@@ -51,12 +51,12 @@ You need Node 26.4 or later, because OpenTUI calls its native library through `n
 pnpm evorca
 ```
 
-Type a message and press Enter. Each line you send appears in the transcript, followed by the reply. These commands are available:
+The shell opens on the home screen. Type a message and press Enter. After the first message, the transcript replaces the home screen. Each line you send appears in the transcript, followed by the reply. These commands are available:
 
 - `/help` lists the commands.
 - `/exit` closes evorca. ctrl+c does the same.
 
-When the terminal is narrower than the banner, the plain name replaces it. The shell needs an interactive terminal. When stdin or stdout is not one, as in `echo hi | pnpm evorca`, it prints `evorca needs an interactive terminal.` and exits with code 1.
+The shell paints the whole screen in grays on a near-black background, so it looks the same in light and dark terminals. When the terminal is narrower than the wordmark, the plain name replaces it. The shell needs an interactive terminal. When stdin or stdout is not one, as in `echo hi | pnpm evorca`, it prints `evorca needs an interactive terminal.` and exits with code 1.
 
 ## Fetch a scenario
 
