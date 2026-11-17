@@ -19,7 +19,6 @@ import { homedir } from "node:os";
 import { sep } from "node:path";
 import {
   createCliRenderer,
-  RGBA,
   TextAttributes,
   type BorderCharacters,
   type InputRenderable,
@@ -35,21 +34,18 @@ import { memo, useEffect, useRef, useState } from "react";
 import packageJson from "../package.json" with { type: "json" };
 import { submit, type Entry } from "./commands.js";
 import {
+  bootDuration,
   frameRate,
-  glint,
-  introDuration,
-  reveal,
+  led,
   sleep,
   typewriter,
   wordmarkFrame,
+  type Led,
   type Phase,
 } from "./motion.js";
-import { wordmark, wordmarkWidth, type Tone, type Weight } from "./wordmark.js";
+import { panel } from "./wordmark.js";
 
-/**
- * The grays the shell draws with, each with equal red, green, and blue. The
- * wordmark blends them.
- */
+/** The grays the shell draws with, each with equal red, green, and blue. */
 export const palette = {
   background: "#0a0a0a",
   panel: "#161616",
@@ -83,6 +79,8 @@ const hints = [
   ["ctrl+c", "exit"],
 ] as const;
 const separator = "   ";
+const dot = "•";
+const wordmarkWidth = (panel[0]?.length ?? 0) * 2 - 1;
 const bar: BorderCharacters = {
   topLeft: "",
   topRight: "",
@@ -100,12 +98,10 @@ const voices: Readonly<Record<Entry["role"], Voice>> = {
   you: { bar: palette.bright, fg: palette.bright, panel: palette.panel, paddingY: 1 },
   evorca: { bar: palette.muted, fg: palette.text, paddingY: 0 },
 };
-
-const background = RGBA.fromHex(palette.background);
-const brightest = RGBA.fromHex(palette.bright);
-const inks: Readonly<Record<Weight, RGBA>> = {
-  light: RGBA.fromHex(palette.muted),
-  heavy: brightest,
+const inks: Readonly<Record<Led, string>> = {
+  off: palette.border,
+  dim: palette.muted,
+  on: palette.bright,
 };
 
 /**
@@ -134,7 +130,7 @@ export function Shell({ directory, onExit }: ShellProps) {
   const [view, setView] = useState<View>({ view: "home" });
   const [draft, setDraft] = useState<Draft>({
     kind: "empty",
-    typingFrom: start + introDuration,
+    typingFrom: start + bootDuration,
     firstExample: 0,
   });
   const [, setFrame] = useState(start);
@@ -257,22 +253,13 @@ const Masthead = memo(function Masthead({ wordmarkAt }: { readonly wordmarkAt: n
 function Wordmark({ t }: { readonly t: number }) {
   return (
     <box flexDirection="column" flexShrink={0}>
-      {wordmark.map((row, y) => (
+      {panel.map((row, y) => (
         <text key={y}>
-          {row.map((cell, x) => {
-            const shown = reveal(t, x, wordmarkWidth);
-            const lit = glint(t, x, wordmarkWidth);
-            return (
-              <span
-                key={x}
-                fg={paint(cell.fg, cell.weight, shown, lit)}
-                bg={paint(cell.bg, cell.weight, shown, lit)}
-                attributes={cell.weight === "heavy" ? TextAttributes.BOLD : 0}
-              >
-                {shown === 0 ? " " : cell.char}
-              </span>
-            );
-          })}
+          {row.map((spot, x) => (
+            <span key={x} fg={inks[spot.lit ? led(t, spot.id) : "off"]}>
+              {x === 0 ? dot : ` ${dot}`}
+            </span>
+          ))}
         </text>
       ))}
     </box>
@@ -333,17 +320,6 @@ function Footer({ directory, width }: { readonly directory: string; readonly wid
       </text>
     </box>
   );
-}
-
-function paint(tone: Tone, weight: Weight, shown: number, lit: number): RGBA {
-  if (tone === "background") return background;
-  const color = tone === "ink" ? inks[weight] : mix(background, inks[weight], 0.25);
-  return mix(background, mix(color, brightest, lit), shown);
-}
-
-function mix(from: RGBA, to: RGBA, t: number): RGBA {
-  const lerp = (a: number, b: number) => a + (b - a) * t;
-  return RGBA.fromValues(lerp(from.r, to.r), lerp(from.g, to.g), lerp(from.b, to.b));
 }
 
 function hintsWidth(shown: readonly (readonly [string, string])[]): number {
