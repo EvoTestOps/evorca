@@ -15,9 +15,10 @@ evorca aims to investigate production incidents on its own and find their root c
 
 ## Development
 
-You need Node 22.12 or later. `.nvmrc` pins Node 22. `corepack enable` provides the pnpm version that `package.json` pins. From the repository root, run:
+You need Node 26.4 or later. `.nvmrc` pins Node 26. `corepack enable` provides the pnpm version that `package.json` pins. Node 26 does not include corepack, so install it with npm first. From the repository root, run:
 
 ```sh
+npm install -g corepack
 corepack enable
 pnpm install
 pnpm check
