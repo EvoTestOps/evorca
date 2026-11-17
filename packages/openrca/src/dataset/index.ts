@@ -4,5 +4,6 @@
  *
  * @module
  */
+export { answerKeyFiles } from "../pinned.js";
 export { fetchOpenRcaData } from "./fetch.js";
 export type { FileProgress } from "./fetch.js";

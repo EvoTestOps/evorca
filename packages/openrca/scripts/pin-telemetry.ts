@@ -11,12 +11,12 @@
  */
 import { writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { measure } from "../dataset/fetch.js";
-import { openRemoteZip } from "../dataset/remote-zip.js";
-import { driveArchives, type FileDigest } from "../pinned.js";
-import { openRcaScenarios } from "../scenarios.js";
+import { measure } from "../src/dataset/fetch.js";
+import { openRemoteZip } from "../src/dataset/remote-zip.js";
+import { driveArchives, type FileDigest } from "../src/pinned.js";
+import { openRcaScenarios } from "../src/scenarios.js";
 
-const outPath = fileURLToPath(new URL("../pinned-telemetry.json", import.meta.url));
+const outPath = fileURLToPath(new URL("../src/pinned-telemetry.json", import.meta.url));
 const systems = Object.values(openRcaScenarios).join("|");
 const telemetryFile = new RegExp(
   `^(?:${systems})/telemetry/\\d{4}_\\d{2}_\\d{2}/(?:log|metric|trace)/[^./][^/]*$`,

@@ -106,3 +106,16 @@ export type TelemetryFile = `${OpenRcaSystem}/telemetry/${string}`;
  * `pnpm --filter @evorca/openrca pin-telemetry` writes to `pinned-telemetry.json`.
  */
 export const telemetryFiles: Readonly<Record<TelemetryFile, FileDigest>> = telemetry;
+
+/**
+ * The pins that scoring depends on as one record, for a report that names what
+ * produced its scores. It leaves out the telemetry, which scoring never reads.
+ */
+export const pinnedInputs = {
+  repository: openRcaRepository,
+  commit: openRcaCommit,
+  driveArchives,
+  answerKeySha256: Object.fromEntries(
+    Object.entries(answerKeyFiles).map(([file, { sha256 }]) => [file, sha256]),
+  ),
+};

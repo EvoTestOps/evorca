@@ -9,7 +9,7 @@
     "url": "git+https://github.com/EvoTestOps/evorca.git"
   },
   "engines": {
-    "node": ">=22.12"
+    "node": ">=26.4"
   },
   "packageManager": "pnpm@10.4.1",
   "scripts": {
@@ -19,11 +19,11 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check": "pnpm format:check && pnpm typecheck && pnpm test && pnpm build",
-    "evorca": "tsx packages/cli/src/main.ts"
+    "evorca": "node --experimental-ffi --disable-warning=ExperimentalWarning --import tsx packages/cli/src/main.ts"
   },
   "devDependencies": {
     "@changesets/cli": "^3.0.3",
-    "@types/node": "^22.20.5",
+    "@types/node": "^26.6.6",
     "prettier": "^3.9.10",
     "tsx": "^4.23.15",
     "typescript": "^6.0.3",
