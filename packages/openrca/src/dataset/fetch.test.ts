@@ -8,7 +8,7 @@ import { buffer } from "node:stream/consumers";
 import { describe, expect, it, onTestFinished } from "vitest";
 import yazl from "yazl";
 import { driveArchives } from "../pinned.js";
-import { fetchOpenRcaData } from "./fetch.js";
+import { fetchOpenRcaData, type FileProgress } from "./fetch.js";
 
 const query = Buffer.from('task_index,instruction,scoring_points\ntask_3,Find it.,"The only"\n');
 const record = Buffer.from("level,reason,component,timestamp,datetime\n");
@@ -18,6 +18,17 @@ const trace = Buffer.from("timestamp,cmdb_id,parent_id,span_id,trace_id,duration
 const telemetry = "Market/cloudbed-1/telemetry";
 const metricEntry = `${telemetry}/2022_03_20/metric/metric_app.csv`;
 const traceEntry = `${telemetry}/2022_03_21/trace/trace_span.csv`;
+
+const quotaPage =
+  "<!DOCTYPE html><html><head><title>Google Drive - Quota exceeded</title></head><body>" +
+  '<p class="uc-error-caption">Sorry, you can&#39;t view or download this file at this time.</p>' +
+  "</body></html>";
+
+const refused = [
+  "Google Drive refused the download (quota exceeded).",
+  `Download Market.zip (0.00 GB) from https://drive.google.com/file/d/${driveArchives.Market.driveId}/view yourself, then run:`,
+  "  pnpm evorca fetch --benchmark=openrca --scenario=market-cloudbed-1 --archive=<path>",
+].join("\n");
 
 const pin = (bytes: Buffer) => ({
   bytes: bytes.length,
@@ -31,10 +42,14 @@ async function zipOf(files: Record<string, Buffer>): Promise<Buffer> {
   return buffer(zip.outputStream);
 }
 
-async function serve(body: Buffer, { reportedTotal = body.length } = {}) {
+async function serve(body: Buffer, { reportedTotal = body.length, refuseAfter = Infinity } = {}) {
   let requests = 0;
   const server = createServer((request, response) => {
     requests += 1;
+    if (requests > refuseAfter) {
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(quotaPage);
+      return;
+    }
     const range = /^bytes=(\d+)-(\d+)$/.exec(request.headers.range ?? "");
     if (range === null) {
       response.writeHead(200).end(body);
@@ -55,7 +70,8 @@ async function serve(body: Buffer, { reportedTotal = body.length } = {}) {
 async function setUp({
   queryCsv = query,
   reportedTotal,
-}: { queryCsv?: Buffer; reportedTotal?: number } = {}) {
+  refuseAfter,
+}: { queryCsv?: Buffer; reportedTotal?: number; refuseAfter?: number } = {}) {
   const dataDir = await mkdtemp(join(tmpdir(), "openrca-"));
   onTestFinished(() => rm(dataDir, { recursive: true }));
   const zip = await zipOf({
@@ -69,11 +85,14 @@ async function setUp({
     [`${telemetry}/2022_03_21/metric/unpinned.csv`]: Buffer.from("a,b\n"),
     "Market/cloudbed-2/telemetry/2022_03_20/metric/metric_app.csv": metric,
   });
-  const server = await serve(zip, { reportedTotal });
+  const server = await serve(zip, { reportedTotal, refuseAfter });
   return {
     dataDir,
     server,
-    archives: { ...driveArchives, Market: { url: server.url, bytes: zip.length } },
+    archives: {
+      ...driveArchives,
+      Market: { ...driveArchives.Market, url: server.url, bytes: zip.length },
+    },
     files: {
       "Market/cloudbed-1/query.csv": pin(queryCsv),
       "Market/cloudbed-1/record.csv": pin(record),
@@ -223,6 +242,39 @@ describe("fetchOpenRcaData", () => {
     await expect(
       fetchAll({ scenarios: ["market-cloudbed-1"], dataDir, archives, files }),
     ).rejects.toThrow(server.url);
+  });
+
+  it("names the archive to download by hand when Google Drive answers with its quota page", async () => {
+    const { dataDir, archives, files } = await setUp({ refuseAfter: 0 });
+
+    await expect(
+      fetchAll({ scenarios: ["market-cloudbed-1"], dataDir, archives, files }),
+    ).rejects.toHaveProperty("message", refused);
+    expect(await filesIn(dataDir)).toEqual([]);
+  });
+
+  it("names the archive to download by hand when Google Drive refuses partway through a file", async () => {
+    const queryCsv = randomBytes(3 * 1024 * 1024);
+    const { dataDir, archives, files } = await setUp({ queryCsv, refuseAfter: 2 });
+    const progress: FileProgress[] = [];
+
+    await expect(async () => {
+      const fetching = fetchOpenRcaData({
+        scenarios: ["market-cloudbed-1"],
+        dataDir,
+        archives,
+        files,
+      });
+      for await (const file of fetching) progress.push(file);
+    }).rejects.toHaveProperty("message", refused);
+    expect(progress).toEqual([
+      {
+        status: "fetching",
+        path: join(dataDir, "market-cloudbed-1", "query.csv"),
+        ...pin(queryCsv),
+      },
+    ]);
+    expect(await filesIn(dataDir)).toEqual([]);
   });
 });
 

@@ -32,14 +32,22 @@ export type Zip = {
 };
 
 /**
+ * The error that a read from a web server throws when the server answers a
+ * Range request with 200 and a web page instead of the bytes, as Google Drive
+ * does once a file's download quota is used up.
+ */
+export class DownloadRefusedError extends Error {}
+
+/**
  * Reads the directory of a zip archive. `fileNames` lists its entries, and
  * `open` streams the uncompressed contents of one entry.
  *
  * @param source - The archive. Every response of a web server must report its
  *   `bytes` as the total, so a changed archive fails instead of returning other
  *   bytes.
+ * @throws DownloadRefusedError if the web server answers with a web page.
  * @throws Error if a response does not cover the requested range of a
- *   `bytes`-long file. `open` and its stream fail in the same way, and `open`
+ *   `bytes`-long file. `open` and its stream fail in the same ways, and `open`
  *   also fails if the archive has no entry named `fileName`.
  */
 export async function openZip(source: ZipSource): Promise<Zip> {
@@ -105,6 +113,9 @@ class RemoteFile extends yauzl.RandomAccessReader {
   async #fetch(start: number, end: number): Promise<ReadableStream<Uint8Array>> {
     const range = `${start}-${end - 1}`;
     const response = await fetch(this.url, { headers: { Range: `bytes=${range}` } });
+    if (response.status === 200 && response.headers.get("content-type")?.startsWith("text/html")) {
+      throw new DownloadRefusedError(`${this.url} answered bytes ${range} with a web page`);
+    }
     const contentRange = response.headers.get("content-range");
     if (contentRange !== `bytes ${range}/${this.size}` || response.body === null) {
       throw new Error(

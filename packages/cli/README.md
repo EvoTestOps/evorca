@@ -47,7 +47,7 @@ fetched  data/benchmarks/openrca/telecom/telemetry/2020_04_11/trace/trace_span.c
 
 `evorca reproduce` prints the same lines for the answer keys, then a report. It exits with code 1 if a score differs from the published score.
 
-Both commands exit with code 1 and list the valid choices if the command, the benchmark, or a scenario is unknown. They also exit with code 1, and print the reason, if an `--archive` matches no archive of the benchmark, if a file on disk does not match its pinned hash, if the missing files need more than the free disk space, or if a download fails. The free-space message gives both sizes in GB.
+Both commands exit with code 1 and list the valid choices if the command, the benchmark, or a scenario is unknown. They also exit with code 1, and print the reason, if an `--archive` matches no archive of the benchmark, if a file on disk does not match its pinned hash, if the missing files need more than the free disk space, or if a download fails. The free-space message gives both sizes in GB. When Google Drive refuses a download because the file's quota is used up, the message names the archive, its link for a browser, and the command to run with `--archive` once you have downloaded it.
 
 `evorca evaluate` prints one line per task, then the outcomes and the accuracy of each scenario. It exits with code 1 and lists the agents if `--agent` is missing or unknown. Before it runs any task, it exits with code 1 if a scenario's data is missing, with the `evorca fetch` command that downloads it, or if Docker does not answer.
 
@@ -76,7 +76,7 @@ pnpm evorca fetch --benchmark=openrca --scenario=bank
 
 The command writes the answer keys, `query.csv` and `record.csv`, to `data/benchmarks/openrca/bank/` and the telemetry to `data/benchmarks/openrca/bank/telemetry/`. The telemetry of `bank` is 26.40 GB, and the telemetry of all four scenarios is 68.65 GB. A file that is already present and matches its pinned hash stays as it is, so a second run downloads nothing. To fetch all four scenarios, leave out `--scenario`.
 
-Google Drive limits how often people can download a shared file. When Drive refuses a download, download the archive in a browser instead, and pass its path:
+Google Drive limits how often people can download a shared file. When Drive refuses a download, the command prints the archive to download in a browser and the command to run next. To read an archive that you downloaded, pass its path:
 
 ```sh
 pnpm evorca fetch --benchmark=openrca --scenario=bank --archive=$HOME/Downloads/Bank.zip

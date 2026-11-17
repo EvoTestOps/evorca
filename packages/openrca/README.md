@@ -37,6 +37,7 @@ OpenRCA benchmark support for evorca. It reads [OpenRCA](https://github.com/micr
 - `fetchOpenRcaData({ scenarios, dataDir })` makes sure that the answer keys and the telemetry of each scenario exist in `<dataDir>/<scenario>/` and match their pinned size and SHA-256. It is an async generator that yields a `FileProgress` for each file: `present` for a file that is already there, `fetching` when a download starts, and `fetched` when the download matches and has its final name. Each `FileProgress` has the file's `path` and its pinned `bytes` and `sha256`. It throws before any download if a file on disk does not match, or if the missing files need more than the free space in `dataDir`.
 - `fetchOpenRcaData({ scenarios, dataDir, files: answerKeyFiles })` fetches only the answer keys, as `evorca reproduce` does. `answerKeyFiles` maps each answer key's path in the archives, such as `Telecom/query.csv`, to its pinned size and SHA-256.
 - `fetchOpenRcaData({ scenarios, dataDir, localArchives })` reads the archives at the paths in `localArchives` instead of their copies on Google Drive. The size of each file decides which archive it replaces, and each file read from it must match its pinned size and SHA-256. A path whose size matches no archive fails before any download, and the message lists the size of each archive.
+- When Google Drive answers a request with a web page instead of the archive's bytes, as it does once a file's download quota is used up, `fetchOpenRcaData` fails with a message that names the archive, its link for a browser, and the `pnpm evorca fetch` command that reads the archive from disk. See [Download an archive yourself](#download-an-archive-yourself).
 
 ### `@evorca/openrca/scoring`
 
@@ -121,7 +122,15 @@ The archives also hold `.DS_Store` files, which the command skips. `pnpm --filte
 
 ### Download an archive yourself
 
-Google Drive limits how often people can download a shared file. Once a file reaches the limit, Drive answers every request for it with a "Quota exceeded" page for up to 24 hours, and the command fails. Each archive holds the files of these scenarios:
+Google Drive limits how often people can download a shared file. Once a file reaches the limit, Drive answers every request for it with a "Quota exceeded" page for up to 24 hours. The command then stops and names the archive to download in a browser:
+
+```text
+Google Drive refused the download (quota exceeded).
+Download Telecom.zip (3.07 GB) from https://drive.google.com/file/d/1cyOKpqyAP4fy-QiJ6a_cKuwR7D46zyVe/view yourself, then run:
+  pnpm evorca fetch --benchmark=openrca --scenario=telecom --archive=<path>
+```
+
+Each archive holds the files of these scenarios:
 
 | Archive     | Scenarios                            |             Size | Link                                                                     |
 | ----------- | ------------------------------------ | ---------------: | ------------------------------------------------------------------------ |

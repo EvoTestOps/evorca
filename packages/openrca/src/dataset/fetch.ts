@@ -20,12 +20,12 @@ import {
   answerKeyFiles,
   driveArchives,
   telemetryFiles,
-  type Archive,
+  type DriveArchive,
   type FileDigest,
 } from "../pinned.js";
 import { openRcaScenarios, type OpenRcaScenario } from "../scenarios.js";
 import { removeOnDispose } from "../temp.js";
-import { openZip, type Zip, type ZipSource } from "./zip.js";
+import { DownloadRefusedError, openZip, type Zip, type ZipSource } from "./zip.js";
 
 /**
  * One step of fetchOpenRcaData for the file at `path`: the file is `present`,
@@ -58,7 +58,9 @@ type Target = FileDigest & {
  *   `archives`. The size of each path picks the archive it replaces.
  * @throws Error if a local archive has the size of none of `archives`, a file
  *   on disk does not match, or the missing files do not fit, before any
- *   download, or if a download fails or does not match.
+ *   download, or if a download fails or does not match. If Google Drive refuses
+ *   a download, the message names the archive, its link for a browser, and the
+ *   command that reads the archive from disk.
  */
 export async function* fetchOpenRcaData({
   scenarios,
@@ -69,7 +71,7 @@ export async function* fetchOpenRcaData({
 }: {
   readonly scenarios: readonly OpenRcaScenario[];
   readonly dataDir: string;
-  readonly archives?: Readonly<Record<keyof typeof driveArchives, Archive>>;
+  readonly archives?: Readonly<Record<keyof typeof driveArchives, DriveArchive>>;
   readonly files?: Readonly<Record<string, FileDigest>>;
   readonly localArchives?: readonly string[];
 }): AsyncGenerator<FileProgress, void, undefined> {
@@ -91,11 +93,16 @@ export async function* fetchOpenRcaData({
     missing.reduce((bytes, target) => bytes + target.bytes, 0),
   );
   for (const [name, targets] of Map.groupBy(missing, (target) => target.archive)) {
-    const zip = await openZip(onDisk.get(name) ?? archives[name]);
-    for (const target of targets) {
-      yield progress("fetching", target);
-      await download(zip, target);
-      yield progress("fetched", target);
+    try {
+      const zip = await openZip(onDisk.get(name) ?? archives[name]);
+      for (const target of targets) {
+        yield progress("fetching", target);
+        await download(zip, target);
+        yield progress("fetched", target);
+      }
+    } catch (error: unknown) {
+      if (!(error instanceof DownloadRefusedError)) throw error;
+      throw new Error(refusal(name, archives[name], scenarios), { cause: error });
     }
   }
 }
@@ -113,7 +120,7 @@ export async function measure(chunks: AsyncIterable<Buffer>): Promise<FileDigest
 
 async function matchArchives(
   paths: readonly string[],
-  archives: Readonly<Record<string, Archive>>,
+  archives: Readonly<Record<string, DriveArchive>>,
 ): Promise<Map<string, ZipSource>> {
   const named = Object.entries(archives);
   const matched = new Map<string, ZipSource>();
@@ -128,6 +135,21 @@ async function matchArchives(
     matched.set(name, { path, bytes: size });
   }
   return matched;
+}
+
+function refusal(
+  name: string,
+  { driveId, bytes }: DriveArchive,
+  scenarios: readonly OpenRcaScenario[],
+): string {
+  const flags = [...new Set(scenarios)]
+    .filter((scenario) => archiveOf[openRcaScenarios[scenario]] === name)
+    .map((scenario) => `--scenario=${scenario}`);
+  return [
+    "Google Drive refused the download (quota exceeded).",
+    `Download ${name}.zip (${gb(bytes)} GB) from https://drive.google.com/file/d/${driveId}/view yourself, then run:`,
+    `  pnpm evorca fetch --benchmark=openrca ${flags.join(" ")} --archive=<path>`,
+  ].join("\n");
 }
 
 function targetsOf(
