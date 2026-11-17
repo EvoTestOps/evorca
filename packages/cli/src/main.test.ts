@@ -53,6 +53,30 @@ describe("evorca evaluate", () => {
     expect(code).toBe(1);
     expect(stderr).toContain("random");
   });
+
+  it.each([
+    ["--jobs=0", "--jobs must be a positive integer"],
+    ["--jobs=two", "--jobs must be a positive integer"],
+    ["--rows=0,,7", "--rows must list row numbers"],
+    ["--rows=-1", "--rows must list row numbers"],
+  ])("exits with code 1 for %s", async (flag, message) => {
+    const { code, stderr } = await evorca(
+      "evaluate",
+      "--benchmark=openrca",
+      "--agent=random",
+      flag,
+    );
+
+    expect(code).toBe(1);
+    expect(stderr).toContain(message);
+  });
+
+  it("exits with code 1 for a run ID that is not one", async () => {
+    const { code, stderr } = await evorca("evaluate", "--benchmark=openrca", "--resume=../x");
+
+    expect(code).toBe(1);
+    expect(stderr).toContain("--resume takes a run ID");
+  });
 });
 
 describe.each(["fetch", "reproduce", "evaluate"])("evorca %s", (command) => {

@@ -15,7 +15,6 @@
  *
  * @module
  */
-import { randomInt } from "node:crypto";
 import { relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
@@ -39,7 +38,7 @@ type Benchmark = (typeof benchmarks)[keyof typeof benchmarks];
 type Invocation = {
   readonly benchmark: Benchmark;
   readonly scenarios: readonly (keyof Benchmark["scenarios"])[];
-  readonly agent: string | undefined;
+  readonly flags: Flags;
   readonly dataDir: string;
   readonly cacheDir: string;
   readonly runsDir: string;
@@ -54,8 +53,21 @@ const commands = {
     await printProgress(benchmark.fetch({ scenarios, dataDir, files: benchmark.answerKeys }));
     if (!(await benchmark.reproduce({ scenarios, dataDir, cacheDir }))) process.exitCode = 1;
   },
-  async evaluate({ benchmark, scenarios, agent, ...dirs }: Invocation) {
-    const options = { ...dirs, scenarios, agent: choose(agents, agent, "agent"), seed: readSeed() };
+  async evaluate({ benchmark, scenarios, flags, ...dirs }: Invocation) {
+    const resume = flags.resume === undefined ? undefined : parseRunId(flags.resume);
+    const agent =
+      flags.agent === undefined && resume !== undefined
+        ? undefined
+        : choose(agents, flags.agent, "agent");
+    const options = {
+      ...dirs,
+      scenarios,
+      agent,
+      resume,
+      seed: readSeed(),
+      rows: flags.rows === undefined ? undefined : parseRows(flags.rows),
+      jobs: flags.jobs === undefined ? undefined : parseCount(flags.jobs, "--jobs"),
+    };
     if (!(await benchmark.evaluate(options))) process.exitCode = 1;
   },
 };
@@ -63,7 +75,10 @@ const commands = {
 const usage = [
   "Usage: evorca",
   `       evorca <${Object.keys(commands).join("|")}> --benchmark=<benchmark> [--scenario=<scenario>...]`,
-  "                [--agent=<agent>]",
+  "       evorca evaluate --benchmark=<benchmark> --agent=<agent> [--scenario=<scenario>...]",
+  "                [--rows=<row>,...] [--jobs=<count>]",
+  "       evorca evaluate --benchmark=<benchmark> --resume=<run id> [--scenario=<scenario>...]",
+  "                [--jobs=<count>]",
 ].join("\n");
 
 const { positionals, values } = parseCommandLine();
@@ -89,7 +104,7 @@ if (positionals.length === 0 && Object.keys(values).length === 0) {
   await commands[command]({
     benchmark,
     scenarios,
-    agent: values.agent,
+    flags: values,
     dataDir: fileURLToPath(new URL(`data/benchmarks/${name}/`, root)),
     cacheDir: fileURLToPath(new URL(".cache/", root)),
     runsDir: fileURLToPath(new URL(`data/runs/${name}/`, root)),
@@ -108,6 +123,13 @@ async function printProgress(progress: AsyncIterable<FileProgress>) {
   }
 }
 
+type Flags = {
+  readonly agent?: string | undefined;
+  readonly rows?: string | undefined;
+  readonly jobs?: string | undefined;
+  readonly resume?: string | undefined;
+};
+
 function parseCommandLine() {
   try {
     return parseArgs({
@@ -116,6 +138,9 @@ function parseCommandLine() {
         benchmark: { type: "string" },
         scenario: { type: "string", multiple: true },
         agent: { type: "string" },
+        rows: { type: "string" },
+        jobs: { type: "string" },
+        resume: { type: "string" },
       },
     });
   } catch (error: unknown) {
@@ -123,13 +148,33 @@ function parseCommandLine() {
   }
 }
 
-function readSeed(): number {
+function readSeed(): number | undefined {
   const seed = process.env.EVORCA_SEED;
-  if (seed === undefined) return randomInt(2 ** 32);
+  if (seed === undefined) return undefined;
   if (!/^\d+$/.test(seed) || !Number.isSafeInteger(Number(seed))) {
     fail(`EVORCA_SEED must be a non-negative integer, not ${JSON.stringify(seed)}.`);
   }
   return Number(seed);
+}
+
+function parseRows(text: string): number[] {
+  if (!/^\d+(,\d+)*$/.test(text)) {
+    fail(`--rows must list row numbers, such as --rows=0,7,21, not ${JSON.stringify(text)}.`);
+  }
+  return [...new Set(text.split(",").map(Number))].sort((a, b) => a - b);
+}
+
+function parseCount(text: string, flag: string): number {
+  if (!/^[1-9]\d*$/.test(text))
+    fail(`${flag} must be a positive integer, not ${JSON.stringify(text)}.`);
+  return Number(text);
+}
+
+function parseRunId(text: string): string {
+  if (!/^\d{8}T\d{6}Z-[a-z0-9-]+$/.test(text)) {
+    fail(`--resume takes a run ID, such as 20261117T121537Z-random, not ${JSON.stringify(text)}.`);
+  }
+  return text;
 }
 
 function choose<T extends object>(table: T, key: string | undefined, option: string) {

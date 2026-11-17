@@ -19,20 +19,45 @@ import { parsePrediction, type OpenRcaScenario } from "@evorca/openrca";
 const run = promisify(execFile);
 const containerUser = "65534:65534";
 
+/** The Docker label that holds the run ID on every container that a run starts. */
+export const runLabel = "evorca.run";
+
+/**
+ * The limits of one task's container: its memory and its `/tmp` folder in MiB,
+ * its CPUs, and its processes. `/tmp` lives in memory and counts toward
+ * `memoryMiB`.
+ */
+export type Resources = {
+  readonly memoryMiB: number;
+  readonly tmpMiB: number;
+  readonly cpus: number;
+  readonly pids: number;
+};
+
 /**
  * How `evorca evaluate` runs an agent. `seesCandidates` adds the scenario's
  * candidate components and reasons to `/task.json`. `needsTelemetry` mounts the
- * scenario's telemetry at `/data`. `timeoutSeconds` bounds each task.
+ * scenario's telemetry at `/data`. `timeoutSeconds` bounds each task, and
+ * `resources` limits its container. `jobs` is how many tasks run at once
+ * unless `--jobs` says otherwise.
  */
 export type Agent = {
   readonly seesCandidates: boolean;
   readonly needsTelemetry: boolean;
   readonly timeoutSeconds: number;
+  readonly resources: Resources;
+  readonly jobs: number;
 };
 
 /** The agents by name. Each agent's image builds from `agents/<name>/` at the repository root. */
 export const agents = {
-  random: { seesCandidates: true, needsTelemetry: false, timeoutSeconds: 60 },
+  random: {
+    seesCandidates: true,
+    needsTelemetry: false,
+    timeoutSeconds: 60,
+    resources: { memoryMiB: 1024, tmpMiB: 64, cpus: 1, pids: 128 },
+    jobs: 1,
+  },
 } satisfies Record<string, Agent>;
 
 /** The name of an agent, such as `random`. */
@@ -88,13 +113,26 @@ export async function dockerVersions(): Promise<
 }
 
 /**
- * One task's container. `image` is an image ID, and `taskDir` holds the task's
- * `task.json`. `runContainer` creates the task's `out/` folder in `taskDir`.
+ * Returns the memory of the Docker daemon's machine in MiB, which on Docker
+ * Desktop is the memory of its virtual machine.
+ *
+ * @throws Error if the daemon does not answer.
+ */
+export async function dockerMemoryMiB(): Promise<number> {
+  const info = await run("docker", ["info", "--format", "{{.MemTotal}}"]);
+  return Math.floor(Number(info.stdout.trim()) / 2 ** 20);
+}
+
+/**
+ * One task's container. `runId` labels it, `image` is an image ID, and
+ * `taskDir` holds the task's `task.json`. `runContainer` creates the task's
+ * `out/` folder in `taskDir`.
  */
 export type TaskContainer = {
+  readonly runId: string;
   readonly name: string;
   readonly image: string;
-  readonly agent: Agent;
+  readonly agent: Pick<Agent, "needsTelemetry" | "timeoutSeconds" | "resources">;
   readonly taskDir: string;
   readonly dataDir: string;
   readonly scenario: OpenRcaScenario;
@@ -104,13 +142,15 @@ export type TaskContainer = {
 /**
  * Returns the arguments of `docker run` for one task. The container runs as an
  * unprivileged user with no network, no capabilities, a read-only root file
- * system, and limits on memory, CPU, and processes. It gets `task.json` at
- * `/task.json`, read-only, and `out/` at `/out`, writable. If the agent needs
- * telemetry, it gets `<dataDir>/<scenario>/telemetry/` at `/data`, read-only.
- * The seed is in `EVORCA_SEED`.
+ * system, and the agent's limits on memory, `/tmp`, CPU, and processes. It gets
+ * `task.json` at `/task.json`, read-only, and `out/` at `/out`, writable. If
+ * the agent needs telemetry, it gets `<dataDir>/<scenario>/telemetry/` at
+ * `/data`, read-only. The seed is in `EVORCA_SEED`, and the `evorca.run` label
+ * holds the run ID.
  */
 export function dockerRunArgs(container: TaskContainer): string[] {
-  const { name, image, agent, taskDir, dataDir, scenario, seed } = container;
+  const { runId, name, image, agent, taskDir, dataDir, scenario, seed } = container;
+  const { memoryMiB, tmpMiB, cpus, pids } = agent.resources;
   const telemetry = agent.needsTelemetry
     ? ["--mount", `type=bind,src=${join(dataDir, scenario, "telemetry")},dst=/data,readonly`]
     : [];
@@ -120,11 +160,13 @@ export function dockerRunArgs(container: TaskContainer): string[] {
     "--init",
     "--name",
     name,
+    "--label",
+    `${runLabel}=${runId}`,
     "--network",
     "none",
     "--read-only",
     "--tmpfs",
-    "/tmp:rw,noexec,nosuid,size=64m",
+    `/tmp:rw,noexec,nosuid,size=${tmpMiB}m`,
     "--cap-drop",
     "ALL",
     "--security-opt",
@@ -132,11 +174,11 @@ export function dockerRunArgs(container: TaskContainer): string[] {
     "--user",
     containerUser,
     "--memory",
-    "1g",
+    `${memoryMiB}m`,
     "--cpus",
-    "1",
+    String(cpus),
     "--pids-limit",
-    "128",
+    String(pids),
     "--mount",
     `type=bind,src=${join(taskDir, "task.json")},dst=/task.json,readonly`,
     "--mount",
@@ -169,7 +211,11 @@ export async function runContainer(container: TaskContainer, logPath: string): P
   // The container's user does not own the folder on the host.
   await chmod(outDir, 0o777);
   await using log = await open(logPath, "w");
-  const child = spawn("docker", dockerRunArgs(container), { stdio: ["ignore", log.fd, log.fd] });
+  // Detached, so a ctrl+c in the terminal reaches evorca alone, which then removes the containers.
+  const child = spawn("docker", dockerRunArgs(container), {
+    stdio: ["ignore", log.fd, log.fd],
+    detached: true,
+  });
   let timedOut = false;
   const timer = setTimeout(() => {
     timedOut = true;
@@ -189,6 +235,17 @@ export async function runContainer(container: TaskContainer, logPath: string): P
  */
 export type Outcome =
   "answered" | "no-prediction" | "invalid-prediction" | "nonzero-exit" | "timeout";
+
+/**
+ * Removes every container that carries the run's label, running or not. A run
+ * calls it when it stops, and a resumed run calls it before its first task.
+ */
+export async function removeRunContainers(runId: string): Promise<void> {
+  const filter = `label=${runLabel}=${runId}`;
+  const listed = await run("docker", ["ps", "--all", "--quiet", "--filter", filter]);
+  const ids = listed.stdout.split("\n").filter((id) => id !== "");
+  if (ids.length > 0) await run("docker", ["rm", "--force", ...ids]);
+}
 
 /**
  * Returns a task's outcome and the diagnosis to score, from how its container

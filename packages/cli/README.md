@@ -8,13 +8,12 @@ The `evorca` command. From the repository root, `pnpm evorca` runs it without a 
 - The slash commands `/help` and `/exit`.
 - `evorca fetch`, which downloads the answer keys and the telemetry of a benchmark's scenarios into `data/benchmarks/<benchmark>/<scenario>/` at the repository root.
 - `evorca reproduce`, which downloads only the answer keys and checks that evorca reproduces the scores that a benchmark publishes. It keeps the scorer's checkout and environment in `.cache/` at the repository root.
-- `evorca evaluate`, which runs an agent from `agents/` on a benchmark's scenarios, one Docker container per task, scores the answers, and keeps each run in `data/runs/<benchmark>/<scenario>/` at the repository root.
+- `evorca evaluate`, which runs an agent from `agents/` on a benchmark's scenarios, one Docker container per task and several tasks at a time, scores the answers, and keeps each run in `data/runs/<benchmark>/<scenario>/` at the repository root. A run that stops can resume from its last finished task.
 - One benchmark, `openrca`, through [`@evorca/openrca`](../openrca/README.md).
 
 ## Non-goals
 
 - An agent in the shell. Every message in the shell gets the same reply until one is connected.
-- Parallel tasks and resumed runs. `evorca evaluate` runs one task at a time, and a run that stops starts again from the first task.
 - Benchmark logic. Each benchmark package owns its scenarios, its files, how to download them, and how to score them. The command only parses the command line and prints results.
 - Configuration, themes, and mouse input.
 - Publishing to npm. The package is private, and `pnpm evorca` runs its TypeScript source through tsx.
@@ -28,13 +27,19 @@ evorca
 evorca fetch --benchmark=<benchmark> [--scenario=<scenario>...]
 evorca reproduce --benchmark=<benchmark> [--scenario=<scenario>...]
 evorca evaluate --benchmark=<benchmark> --agent=<agent> [--scenario=<scenario>...]
+                [--rows=<row>,...] [--jobs=<count>]
+evorca evaluate --benchmark=<benchmark> --resume=<run ID> [--scenario=<scenario>...]
+                [--jobs=<count>]
 ```
 
 - Without arguments, `evorca` opens the [interactive shell](#use-the-shell).
 - `--benchmark` is required. The only benchmark is `openrca`.
 - `--scenario` names one scenario and can repeat. Without it, the command uses every scenario of the benchmark. The `openrca` scenarios are `bank`, `telecom`, `market-cloudbed-1`, and `market-cloudbed-2`.
-- `--agent` is required by `evorca evaluate`. The only agent is `random`.
-- `EVORCA_SEED`, a non-negative integer in the environment, sets the seed of `evorca evaluate`. Without it, the command picks a seed and prints it.
+- `--agent` is required by `evorca evaluate`, unless it resumes a run. The only agent is `random`.
+- `--rows` limits `evorca evaluate` to some rows of each scenario's `query.csv`, counted from 0, such as `--rows=0,7,21` for a pilot. Without it, the command runs every task.
+- `--jobs` sets how many tasks `evorca evaluate` runs at once. Without it, the command uses the agent's `jobs`.
+- `--resume` continues the run with that ID. The run keeps its agent, seed, and rows, and `--jobs` can change. With `--scenario`, the command resumes only those scenarios of the run.
+- `EVORCA_SEED`, a non-negative integer in the environment, sets the seed of `evorca evaluate`. Without it, the command picks a seed and prints it, or uses the seed of the run it resumes.
 
 `evorca fetch` prints one line for each file that is already present, and two lines for each file that it downloads: one when the download starts and one when it is done. A line has the status, the path, and the size in bytes. A `present` or `fetched` line also has the SHA-256:
 
@@ -48,7 +53,7 @@ fetched  data/benchmarks/openrca/telecom/telemetry/2020_04_11/trace/trace_span.c
 
 Both commands exit with code 1 and list the valid choices if the command, the benchmark, or a scenario is unknown. They also exit with code 1, and print the reason, if a file on disk does not match its pinned hash, if the missing files need more than the free disk space, or if a download fails. The free-space message gives both sizes in GB.
 
-`evorca evaluate` prints one line per task, then the outcomes and the accuracy of each scenario. It exits with code 1 and lists the agents if `--agent` is missing or unknown. Before it runs any task, it exits with code 1 if a scenario's data is missing, with the `evorca fetch` command that downloads it, or if Docker does not answer.
+`evorca evaluate` prints one line per task, then the outcomes and the accuracy of each scenario. It exits with code 1 and lists the agents if `--agent` is missing or unknown. Before it runs any task, it exits with code 1 if a scenario's data is missing, with the `evorca fetch` command that downloads it, if a row in `--rows` does not exist, if Docker does not answer, or if the run to resume is missing or has other settings. It names each setting that differs.
 
 ## Use the shell
 
@@ -115,6 +120,7 @@ Agent random, image evorca-agent-random:<folder hash>, sha256:<image ID>
 Seed 7. Set EVORCA_SEED=7 to repeat this run.
 git <commit>
 node v26.13.1, docker 28.2.2, daemon 28.2.2
+Run 20261117T121537Z-random, 1 task at a time.
 
 telecom: 51 tasks, run folder data/runs/openrca/telecom/20261117T121537Z-random
 telecom 1/51 task_2 answered 0.22 s
@@ -127,11 +133,25 @@ telecom: 51 answered
   total     51 tasks  strict   5.88%  partial   8.80%
 ```
 
-A run with the same seed writes the same predictions, byte for byte. Without `EVORCA_SEED`, the command picks a seed and prints it. One seed is one sample of the agent's accuracy, so compare agents over several seeds.
+A run with the same seed writes the same predictions, byte for byte, whatever its `--jobs`. Without `EVORCA_SEED`, the command picks a seed and prints it. One seed is one sample of the agent's accuracy, so compare agents over several seeds.
+
+With `--jobs=4`, four containers run at once, and the lines come in the order that the tasks finish. If the agent's tasks together ask for more memory than Docker has, the command prints a warning before the first task. On Docker Desktop, set the memory under **Settings** > **Resources**.
+
+For a pilot, run a few rows with `--rows=0,7,21`. The command still writes a `predictions.csv` row for every task, because the evaluator matches predictions to tasks by position, and gives the other rows the empty prediction `{}`. The accuracy and `scores.json` cover only the rows of the run.
+
+### Resume a run
+
+To stop a run, press ctrl+c. The command removes the run's containers and prints the command that resumes the run:
+
+```sh
+pnpm evorca evaluate --benchmark=openrca --resume=20261117T121537Z-random
+```
+
+The resumed run skips each task that has an outcome in `run.json`. It runs the other tasks again from the start, so it first deletes their folders. It removes containers that a killed run left behind. It refuses to resume if the agent's folder, its entry in the `agents` table, `EVORCA_SEED`, or `--rows` differ from the run's.
 
 ### Read a run
 
-Each run of a scenario lands in `data/runs/<benchmark>/<scenario>/<run ID>/`. The run ID is the start time in UTC and the agent's name, such as `20261117T121537Z-random`:
+Each run of a scenario lands in `data/runs/<benchmark>/<scenario>/<run ID>/`. The run ID is the start time in UTC and the agent's name, such as `20261117T121537Z-random`. A run of several scenarios uses one run ID for all of them:
 
 ```text
 <run ID>/
@@ -144,16 +164,20 @@ Each run of a scenario lands in `data/runs/<benchmark>/<scenario>/<run ID>/`. Th
     log.txt        the container's stdout and stderr
 ```
 
-`run.json` holds:
+The command writes `run.json` before the first task and again after each task. It writes a new file and renames it into place, so `run.json` is always whole. `run.json` holds:
 
 - `runId`, `benchmark`, and `scenario`.
-- `agent`: the `name`, `seesCandidates`, `needsTelemetry`, `timeoutSeconds`, the `image` tag, and the `imageId`.
+- `agent`: the `name`, `seesCandidates`, `needsTelemetry`, `timeoutSeconds`, `resources`, the `image` tag, and the `imageId`.
 - `seed`.
+- `rows`: the rows of the run, or `null` for every row.
+- `jobs`: how many tasks ran at once.
 - `git`: the `commit` and whether the checkout was `dirty`, with uncommitted changes.
 - `versions`: Node, and the Docker client and daemon.
 - `pinnedInputs`: the OpenRCA commit, the Drive archives, and the SHA-256 of each answer key.
-- `startedAt` and `endedAt`, in UTC.
-- `tasks`: the `row`, `taskIndex`, `outcome`, `exitCode`, and `seconds` of each task.
+- `startedAt`, in UTC.
+- `resumes`: the `startedAt`, `git`, and `versions` of each later session of the run.
+- `endedAt`, in UTC, or `null` while a task has no outcome.
+- `tasks`: the `row`, `taskIndex`, `outcome`, `exitCode`, and `seconds` of each task, in row order.
 
 ## Run an agent in a container
 
@@ -164,6 +188,8 @@ Each agent has a folder, `agents/<name>/` at the repository root, with a `Docker
 | `seesCandidates` | `/task.json` lists the candidate components and reasons of the scenario.         |
 | `needsTelemetry` | The container gets the scenario's telemetry at `/data`.                          |
 | `timeoutSeconds` | `evorca evaluate` kills the container of a task that runs longer than this time. |
+| `resources`      | The container's `memoryMiB`, `tmpMiB` for `/tmp`, `cpus`, and `pids`.            |
+| `jobs`           | How many tasks run at once without `--jobs`.                                     |
 
 RCA-Agent sees the candidates, so an agent with `seesCandidates` answers under the same conditions. The [`@evorca/openrca` README](../openrca/README.md#show-an-agent-the-candidates) explains the choice.
 
@@ -174,10 +200,10 @@ The container of a task sees:
 - `/task.json`, read-only, with the `scenario`, the `row`, the `taskIndex`, the `instruction`, and, if the agent sees candidates, the `candidates` with their `components` and `reasons`. It never holds the scoring points.
 - `/out`, writable. The agent writes its answer to `/out/prediction.json` as OpenRCA prediction JSON, such as `{"1": {"root cause occurrence datetime": "2020-04-11 00:05:00", "root cause component": "docker_003", "root cause reason": "CPU fault"}}`.
 - `/data`, read-only, only if the agent needs telemetry. It is `data/benchmarks/openrca/<scenario>/telemetry/`. The container never sees `query.csv` or `record.csv`, which hold the answers.
-- `/tmp`, a 64 MB folder in memory.
+- `/tmp`, a folder in memory of `tmpMiB`. Its files count toward the container's memory.
 - `EVORCA_SEED`, the seed of the run.
 
-The container has no network and a read-only root file system. It runs as user `65534:65534` with no Linux capabilities and `no-new-privileges`, and it gets 1 GB of memory, one CPU, and at most 128 processes.
+The container has no network and a read-only root file system. It runs as user `65534:65534` with no Linux capabilities and `no-new-privileges`, and it gets the memory, CPUs, and processes of the agent's `resources`. The `random` agent gets 1024 MiB of memory, a 64 MiB `/tmp`, one CPU, and at most 128 processes, and it runs one task at a time. Each container carries the label `evorca.run=<run ID>`.
 
 Each task ends with one outcome. Only `answered` scores the agent's answer. Every other outcome scores the empty prediction `{}`, which scores 0.
 

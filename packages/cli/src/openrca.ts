@@ -7,17 +7,19 @@
  * @module
  */
 import { execFile } from "node:child_process";
+import { randomInt } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join, relative } from "node:path";
 import { promisify } from "node:util";
 import type { Diagnosis } from "@evorca/core";
 import {
   openRcaCandidates,
+  parsePrediction,
   readTasks,
   writePredictions,
   type OpenRcaScenario,
-  type TaskIndex,
+  type OpenRcaTask,
 } from "@evorca/openrca";
 import {
   evaluatorVersions,
@@ -32,14 +34,25 @@ import {
 } from "@evorca/openrca/scoring";
 import {
   agents,
+  dockerMemoryMiB,
   dockerVersions,
   ensureImage,
   outcomeOf,
+  removeRunContainers,
   runContainer,
-  type Agent,
   type AgentName,
-  type Outcome,
 } from "./agents.js";
+import {
+  conflicts,
+  readRuns,
+  runPool,
+  tasksToRun,
+  writeJson,
+  type AgentRecord,
+  type GitState,
+  type RunRecord,
+  type TaskRecord,
+} from "./runs.js";
 
 const run = promisify(execFile);
 
@@ -94,70 +107,68 @@ export async function reproduceOpenRca({
   return mismatches.length === 0;
 }
 
-/** What `run.json` records about the run of one agent on one scenario. */
-type RunRecord = {
-  readonly runId: string;
-  readonly benchmark: "openrca";
-  readonly scenario: OpenRcaScenario;
-  readonly agent: Agent & {
-    readonly name: AgentName;
-    readonly image: string;
-    readonly imageId: string;
-  };
-  readonly seed: number;
-  readonly git: { readonly commit: string; readonly dirty: boolean };
-  readonly pinnedInputs: typeof pinnedInputs;
-  readonly versions: {
-    readonly node: string;
-    readonly docker: { readonly client: string; readonly server: string };
-  };
-  readonly startedAt: string;
-  readonly endedAt: string;
-  readonly tasks: readonly TaskRecord[];
-};
-
 /**
- * What `run.json` records about one task. `exitCode` is null after a timeout or
- * when a signal ended the `docker run` client.
+ * What `evorca evaluate` asks for. `resume` names a run to continue. A setting
+ * that is undefined comes from that run, or else from its default: the agent's
+ * `jobs`, every row, and a random seed.
  */
-type TaskRecord = {
-  readonly row: number;
-  readonly taskIndex: TaskIndex;
-  readonly outcome: Outcome;
-  readonly exitCode: number | null;
-  readonly seconds: number;
-};
-
-type Setup = Pick<RunRecord, "runId" | "agent" | "seed" | "git" | "versions">;
-
-/**
- * Runs `agent` on every task of `scenarios`, one task at a time, each in its
- * own container. It scores the answers with the official evaluator and prints
- * a line per task and the accuracy per scenario. Each scenario's run lands in
- * `<runsDir>/<scenario>/<run id>/`. Before any task, it prints the problem and
- * returns false if a scenario lacks the data that the agent reads, or if Docker
- * does not answer. Otherwise it returns true.
- *
- * @throws Error if git, an image build, a container start, or the evaluator fails.
- */
-export async function evaluateOpenRca({
-  scenarios,
-  agent: name,
-  seed,
-  dataDir,
-  cacheDir,
-  runsDir,
-  agentsDir,
-}: {
+export type EvaluateRequest = {
   readonly scenarios: readonly OpenRcaScenario[];
-  readonly agent: AgentName;
-  readonly seed: number;
+  readonly agent: AgentName | undefined;
+  readonly seed: number | undefined;
+  readonly rows: readonly number[] | undefined;
+  readonly jobs: number | undefined;
+  readonly resume: string | undefined;
+};
+
+type Dirs = {
   readonly dataDir: string;
   readonly cacheDir: string;
   readonly runsDir: string;
   readonly agentsDir: string;
-}): Promise<boolean> {
-  const agent: Agent = agents[name];
+};
+
+/** One scenario of a run: its tasks, the rows that the run covers, and its folder. */
+type ScenarioPlan = {
+  readonly scenario: OpenRcaScenario;
+  readonly tasks: readonly OpenRcaTask[];
+  readonly selected: readonly OpenRcaTask[];
+  readonly runDir: string;
+  readonly record: RunRecord;
+};
+
+/**
+ * Runs an agent on the tasks of `scenarios`, `jobs` tasks at a time, each in
+ * its own container, or continues the run that `resume` names. It scores the
+ * answers with the official evaluator and prints a line per task and the
+ * accuracy per scenario. Each scenario's run lands in
+ * `<runsDir>/<scenario>/<run id>/`, and its `run.json` is rewritten after every
+ * task. A resumed run skips the tasks that have an outcome. Before any task, it
+ * prints the problem and returns false if the run to resume is missing or has
+ * other settings, if a row does not exist, if a scenario lacks the data that the
+ * agent reads, or if Docker does not answer. Otherwise it returns true.
+ *
+ * On SIGINT or SIGTERM, it removes the run's containers and exits, and the run
+ * can resume.
+ *
+ * @throws Error if git, an image build, a container start, or the evaluator fails.
+ */
+export async function evaluateOpenRca(request: EvaluateRequest & Dirs): Promise<boolean> {
+  const { dataDir, cacheDir, runsDir, agentsDir } = request;
+  const resumed =
+    request.resume === undefined
+      ? undefined
+      : await readRuns(runsDir, request.resume, request.scenarios);
+  if (resumed?.size === 0) {
+    console.error(`No run ${request.resume} in ${relative(process.cwd(), runsDir)}.`);
+    return false;
+  }
+  const recorded = resumed?.values().next().value;
+  const name = recorded?.agent.name ?? request.agent;
+  if (name === undefined) throw new Error("evaluateOpenRca needs an agent or a run to resume.");
+  const scenarios = resumed === undefined ? request.scenarios : [...resumed.keys()];
+  const { jobs: defaultJobs, ...agent } = agents[name];
+
   const needs = (scenario: OpenRcaScenario) => [
     join(dataDir, scenario, "query.csv"),
     ...(agent.needsTelemetry ? [join(dataDir, scenario, "telemetry")] : []),
@@ -171,6 +182,17 @@ export async function evaluateOpenRca({
     console.error(`  pnpm evorca fetch --benchmark=openrca ${flags}`);
     return false;
   }
+  const tasks = new Map<OpenRcaScenario, OpenRcaTask[]>();
+  for (const scenario of scenarios) tasks.set(scenario, await readTasks(scenario, dataDir));
+  const rows = request.rows ?? recorded?.rows ?? null;
+  for (const [scenario, scenarioTasks] of tasks) {
+    const unknown = rows?.filter((row) => row >= scenarioTasks.length) ?? [];
+    if (unknown.length > 0) {
+      const range = `rows 0 to ${scenarioTasks.length - 1}`;
+      console.error(`${scenario} has no row ${unknown.join(", ")}. Its tasks are ${range}.`);
+      return false;
+    }
+  }
   const docker = await dockerVersions();
   if (docker === undefined) {
     console.error("Docker is not running. Start Docker Desktop and try again.");
@@ -178,104 +200,207 @@ export async function evaluateOpenRca({
   }
 
   const image = await ensureImage(name, agentsDir);
+  const agentRecord: AgentRecord = { name, ...agent, image: image.tag, imageId: image.id };
+  if (recorded !== undefined) {
+    const problems = conflicts(recorded, { agent: agentRecord, seed: request.seed, rows });
+    if (problems.length > 0) {
+      console.error(`Run ${recorded.runId} cannot resume with other settings:`);
+      for (const problem of problems) console.error(`  ${problem}`);
+      return false;
+    }
+  }
+  const seed = recorded?.seed ?? request.seed ?? randomInt(2 ** 32);
+  const jobs = request.jobs ?? defaultJobs;
+  const runId = recorded?.runId ?? `${new Date().toISOString().replace(/[-:]|\.\d+/g, "")}-${name}`;
   const git = await gitState(agentsDir);
-  const setup: Setup = {
-    runId: `${new Date().toISOString().replace(/[-:]|\.\d+/g, "")}-${name}`,
-    agent: { name, ...agent, image: image.tag, imageId: image.id },
-    seed,
-    git,
-    versions: { node: process.version, docker },
-  };
+  const versions = { node: process.version, docker };
   console.log(`Agent ${name}, image ${image.tag}, ${image.id}`);
   console.log(`Seed ${seed}. Set EVORCA_SEED=${seed} to repeat this run.`);
   console.log(`git ${git.commit}${git.dirty ? " with uncommitted changes" : ""}`);
   console.log(`node ${process.version}, docker ${docker.client}, daemon ${docker.server}`);
-  const scores: ScoredRow[] = [];
-  for (const scenario of scenarios) {
-    scores.push(...(await evaluateScenario(scenario, setup, { dataDir, cacheDir, runsDir })));
+  const pace = `${jobs} ${jobs === 1 ? "task" : "tasks"} at a time`;
+  console.log(`${recorded === undefined ? "Run" : "Resuming run"} ${runId}, ${pace}.`);
+  const memoryMiB = await dockerMemoryMiB();
+  if (jobs * agent.resources.memoryMiB > memoryMiB) {
+    const asked = `${jobs} tasks at ${agent.resources.memoryMiB} MiB`;
+    console.log(`Warning: ${asked} need more than Docker's ${memoryMiB} MiB of memory.`);
   }
-  if (scenarios.length > 1) {
-    console.log("\nAll scenarios:");
-    printSummary(summarize(scores));
+
+  if (recorded !== undefined) await removeRunContainers(runId);
+  const startedAt = new Date().toISOString();
+  const plans: ScenarioPlan[] = [];
+  for (const [scenario, scenarioTasks] of tasks) {
+    const runDir = join(runsDir, scenario, runId);
+    const previous = resumed?.get(scenario);
+    const record: RunRecord =
+      previous === undefined
+        ? {
+            runId,
+            benchmark: "openrca",
+            scenario,
+            agent: agentRecord,
+            seed,
+            rows,
+            jobs,
+            git,
+            pinnedInputs,
+            versions,
+            startedAt,
+            resumes: [],
+            endedAt: null,
+            tasks: [],
+          }
+        : {
+            ...previous,
+            jobs,
+            resumes: [...previous.resumes, { startedAt, git, versions }],
+            endedAt: null,
+          };
+    const selected =
+      rows === null ? scenarioTasks : scenarioTasks.filter((task) => rows.includes(task.row));
+    for (const task of tasksToRun(selected, record.tasks)) {
+      await rm(taskDirOf(runDir, task.row), { recursive: true, force: true });
+    }
+    await mkdir(runDir, { recursive: true });
+    await writeJson(join(runDir, "run.json"), record);
+    plans.push({ scenario, tasks: scenarioTasks, selected, runDir, record });
   }
-  return true;
+
+  const stop = new AbortController();
+  const onSignal = (signal: NodeJS.Signals) => {
+    stop.abort();
+    console.error(
+      `\nStopped. Resume with: pnpm evorca evaluate --benchmark=openrca --resume=${runId}`,
+    );
+    void removeRunContainers(runId).finally(() => process.exit(signal === "SIGINT" ? 130 : 143));
+  };
+  process.once("SIGINT", onSignal).once("SIGTERM", onSignal);
+  try {
+    const scores: ScoredRow[] = [];
+    for (const plan of plans) {
+      const scenarioScores = await evaluateScenario(plan, { jobs, dataDir, cacheDir }, stop.signal);
+      if (scenarioScores === undefined) return false;
+      scores.push(...scenarioScores);
+    }
+    if (plans.length > 1) {
+      console.log("\nAll scenarios:");
+      printSummary(summarize(scores));
+    }
+    return true;
+  } finally {
+    process.off("SIGINT", onSignal).off("SIGTERM", onSignal);
+  }
 }
 
+/**
+ * Runs the tasks of one scenario that have no outcome, rewrites `run.json`
+ * after each, then scores the run. It returns the scores of the run's rows, or
+ * undefined if `signal` aborts.
+ */
 async function evaluateScenario(
-  scenario: OpenRcaScenario,
-  { runId, ...setup }: Setup,
+  { scenario, tasks, selected, runDir, record }: ScenarioPlan,
   {
+    jobs,
     dataDir,
     cacheDir,
-    runsDir,
-  }: { readonly dataDir: string; readonly cacheDir: string; readonly runsDir: string },
-): Promise<ScoredRow[]> {
-  const tasks = await readTasks(scenario, dataDir);
-  const runDir = join(runsDir, scenario, runId);
-  console.log(
-    `\n${scenario}: ${tasks.length} tasks, run folder ${relative(process.cwd(), runDir)}`,
-  );
-  const startedAt = new Date().toISOString();
-  const records: TaskRecord[] = [];
-  const diagnoses = new Map<number, Diagnosis>();
-  for (const task of tasks) {
-    const taskDir = join(runDir, "tasks", String(task.row).padStart(3, "0"));
-    await mkdir(taskDir, { recursive: true });
-    const candidates = setup.agent.seesCandidates
-      ? { candidates: openRcaCandidates[scenario] }
-      : {};
-    await writeFile(join(taskDir, "task.json"), json({ ...task, ...candidates }));
-    const started = performance.now();
-    const exit = await runContainer(
-      {
-        name: `evorca-${runId}-${scenario}-${task.row}`,
-        image: setup.agent.imageId,
-        agent: setup.agent,
-        taskDir,
-        dataDir,
-        scenario,
-        seed: setup.seed,
-      },
-      join(taskDir, "log.txt"),
-    );
-    const seconds = Math.round(performance.now() - started) / 1000;
-    const prediction = await readFile(join(taskDir, "out", "prediction.json"), "utf8").catch(
-      () => undefined,
-    );
-    const { outcome, diagnosis } = outcomeOf(exit, prediction);
-    diagnoses.set(task.row, diagnosis);
-    const exitCode = exit.kind === "exited" ? exit.code : null;
-    records.push({ row: task.row, taskIndex: task.taskIndex, outcome, exitCode, seconds });
-    const progress = `${records.length}/${tasks.length} ${task.taskIndex}`;
-    console.log(`${scenario} ${progress} ${outcome} ${seconds.toFixed(2)} s`);
-  }
-  const endedAt = new Date().toISOString();
+  }: { readonly jobs: number; readonly dataDir: string; readonly cacheDir: string },
+  signal: AbortSignal,
+): Promise<ScoredRow[] | undefined> {
+  const records = new Map(record.tasks.map((task) => [task.row, task]));
+  const pending = tasksToRun(selected, record.tasks);
+  const done = records.size > 0 ? `, ${records.size} done` : "";
+  const folder = relative(process.cwd(), runDir);
+  console.log(`\n${scenario}: ${selected.length} tasks${done}, run folder ${folder}`);
+  let saving = Promise.resolve();
+  const save = (endedAt: string | null) => {
+    const tasks = [...records.values()].sort((a, b) => a.row - b.row);
+    const snapshot: RunRecord = { ...record, endedAt, tasks };
+    saving = saving.then(() => writeJson(join(runDir, "run.json"), snapshot));
+    return saving;
+  };
 
+  await runPool(
+    pending,
+    jobs,
+    async (task) => {
+      const taskRecord = await runTask(task, record, { runDir, dataDir }).catch(
+        (error: unknown) => {
+          if (signal.aborted) return undefined;
+          throw error;
+        },
+      );
+      if (taskRecord === undefined || signal.aborted) return;
+      records.set(task.row, taskRecord);
+      const { taskIndex, outcome, seconds } = taskRecord;
+      const progress = `${records.size}/${selected.length} ${taskIndex}`;
+      console.log(`${scenario} ${progress} ${outcome} ${seconds.toFixed(2)} s`);
+      await save(null);
+    },
+    signal,
+  );
+  if (signal.aborted) return undefined;
+  await save(new Date().toISOString());
+
+  const diagnoses = new Map<number, Diagnosis>();
+  for (const { row, outcome } of records.values()) {
+    if (outcome !== "answered") continue;
+    const text = await readFile(join(taskDirOf(runDir, row), "out", "prediction.json"), "utf8");
+    diagnoses.set(row, parsePrediction(text) ?? []);
+  }
   const predictionsPath = join(runDir, "predictions.csv");
   await writeFile(predictionsPath, writePredictions(tasks, diagnoses));
-  const record: RunRecord = {
-    runId,
-    benchmark: "openrca",
-    scenario,
-    ...setup,
-    pinnedInputs,
-    startedAt,
-    endedAt,
-    tasks: records,
-  };
-  await writeFile(join(runDir, "run.json"), json(record));
-  const scores = await scoreWithOfficialEvaluator({ predictionsPath, scenario, dataDir, cacheDir });
+  const rows = new Set(selected.map((task) => task.row));
+  const scores = (
+    await scoreWithOfficialEvaluator({ predictionsPath, scenario, dataDir, cacheDir })
+  ).filter((score) => rows.has(score.row));
   const summary = summarize(scores);
   await writeFile(join(runDir, "scores.json"), json({ summary, scores }));
 
-  const outcomes = Map.groupBy(records, (task) => task.outcome);
+  const outcomes = Map.groupBy(records.values(), (task) => task.outcome);
   const counts = [...outcomes].map(([outcome, tasks]) => `${tasks.length} ${outcome}`);
   console.log(`\n${scenario}: ${counts.join(", ")}`);
   printSummary(summary);
   return scores;
 }
 
-async function gitState(dir: string): Promise<RunRecord["git"]> {
+/** Runs one task in its own container and returns its record. */
+async function runTask(
+  task: OpenRcaTask,
+  { runId, scenario, agent, seed }: RunRecord,
+  { runDir, dataDir }: { readonly runDir: string; readonly dataDir: string },
+): Promise<TaskRecord> {
+  const taskDir = taskDirOf(runDir, task.row);
+  await mkdir(taskDir, { recursive: true });
+  const candidates = agent.seesCandidates ? { candidates: openRcaCandidates[scenario] } : {};
+  await writeFile(join(taskDir, "task.json"), json({ ...task, ...candidates }));
+  const started = performance.now();
+  const exit = await runContainer(
+    {
+      runId,
+      name: `evorca-${runId}-${scenario}-${task.row}`,
+      image: agent.imageId,
+      agent,
+      taskDir,
+      dataDir,
+      scenario,
+      seed,
+    },
+    join(taskDir, "log.txt"),
+  );
+  const seconds = Math.round(performance.now() - started) / 1000;
+  const prediction = await readFile(join(taskDir, "out", "prediction.json"), "utf8").catch(
+    () => undefined,
+  );
+  const { outcome } = outcomeOf(exit, prediction);
+  const exitCode = exit.kind === "exited" ? exit.code : null;
+  return { row: task.row, taskIndex: task.taskIndex, outcome, exitCode, seconds };
+}
+
+function taskDirOf(runDir: string, row: number): string {
+  return join(runDir, "tasks", String(row).padStart(3, "0"));
+}
+
+async function gitState(dir: string): Promise<GitState> {
   const git = async (...args: string[]) => (await run("git", ["-C", dir, ...args])).stdout.trim();
   return {
     commit: await git("rev-parse", "HEAD"),

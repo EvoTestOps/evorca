@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { dockerRunArgs, outcomeOf, type Exit, type TaskContainer } from "./agents.js";
+import { agents, dockerRunArgs, outcomeOf, type Exit, type TaskContainer } from "./agents.js";
 
 const dataDir = "/repo/data/benchmarks/openrca";
 const taskDir = "/repo/data/runs/openrca/telecom/20261117T120000Z-random/tasks/007";
 const container: TaskContainer = {
+  runId: "20261117T120000Z-random",
   name: "evorca-20261117T120000Z-random-telecom-7",
   image: "sha256:0123",
-  agent: { seesCandidates: true, needsTelemetry: false, timeoutSeconds: 60 },
+  agent: agents.random,
   taskDir,
   dataDir,
   scenario: "telecom",
@@ -27,7 +28,27 @@ describe("dockerRunArgs", () => {
     expect(valuesOf(args, "--security-opt")).toEqual(["no-new-privileges"]);
     expect(valuesOf(args, "--user")).toEqual(["65534:65534"]);
     expect(valuesOf(args, "--env")).toEqual(["EVORCA_SEED=42"]);
+    expect(valuesOf(args, "--label")).toEqual(["evorca.run=20261117T120000Z-random"]);
     expect(args.at(-1)).toBe("sha256:0123");
+  });
+
+  it("gives the random agent 1 GiB of memory, a 64 MiB /tmp, one CPU, and 128 processes", () => {
+    const args = dockerRunArgs(container);
+
+    expect(valuesOf(args, "--memory")).toEqual(["1024m"]);
+    expect(valuesOf(args, "--tmpfs")).toEqual(["/tmp:rw,noexec,nosuid,size=64m"]);
+    expect(valuesOf(args, "--cpus")).toEqual(["1"]);
+    expect(valuesOf(args, "--pids-limit")).toEqual(["128"]);
+  });
+
+  it("applies the limits of the agent's resources", () => {
+    const resources = { memoryMiB: 3072, tmpMiB: 1536, cpus: 2, pids: 256 };
+    const args = dockerRunArgs({ ...container, agent: { ...container.agent, resources } });
+
+    expect(valuesOf(args, "--memory")).toEqual(["3072m"]);
+    expect(valuesOf(args, "--tmpfs")).toEqual(["/tmp:rw,noexec,nosuid,size=1536m"]);
+    expect(valuesOf(args, "--cpus")).toEqual(["2"]);
+    expect(valuesOf(args, "--pids-limit")).toEqual(["256"]);
   });
 
   it("mounts the task read-only and the out folder writable, without telemetry", () => {
