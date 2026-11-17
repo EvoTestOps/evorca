@@ -19,7 +19,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check": "pnpm format:check && pnpm typecheck && pnpm test && pnpm build",
-    "evorca": "node --experimental-ffi --disable-warning=ExperimentalWarning --import tsx packages/cli/src/main.ts"
+    "evorca": "node --env-file-if-exists=.env --experimental-ffi --disable-warning=ExperimentalWarning --import tsx packages/cli/src/main.ts"
   },
   "devDependencies": {
     "@changesets/cli": "^3.0.3",

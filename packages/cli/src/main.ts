@@ -13,6 +13,12 @@
  * container per task, scores its answers, and keeps each run in
  * `data/runs/<benchmark>/<scenario>/`.
  *
+ * The command takes the real API key from `ANTHROPIC_API_KEY` and then deletes
+ * the variable, so no child process inherits the key. `pnpm evorca` loads the
+ * variable from `.env` at the repository root if the file exists.
+ * `EVORCA_UPSTREAM_URL` replaces the Anthropic API for the model proxy, such as
+ * with a mock in a test.
+ *
  * @module
  */
 import { relative } from "node:path";
@@ -21,7 +27,11 @@ import { parseArgs } from "node:util";
 import { openRcaScenarios } from "@evorca/openrca";
 import { answerKeyFiles, fetchOpenRcaData, type FileProgress } from "@evorca/openrca/dataset";
 import { agents } from "./agents.js";
+import { efforts, models } from "./models.js";
 import { evaluateOpenRca, reproduceOpenRca } from "./openrca.js";
+
+const apiKey = process.env.ANTHROPIC_API_KEY;
+delete process.env.ANTHROPIC_API_KEY;
 
 const benchmarks = {
   openrca: {
@@ -67,6 +77,18 @@ const commands = {
       seed: readSeed(),
       rows: flags.rows === undefined ? undefined : parseRows(flags.rows),
       jobs: flags.jobs === undefined ? undefined : parseCount(flags.jobs, "--jobs"),
+      model: flags.model === undefined ? undefined : choose(models, flags.model, "model"),
+      effort: flags.effort === undefined ? undefined : chooseEffort(flags.effort),
+      budgetUsd:
+        flags["budget-usd"] === undefined
+          ? undefined
+          : parseUsd(flags["budget-usd"], "--budget-usd"),
+      taskBudgetUsd:
+        flags["task-budget-usd"] === undefined
+          ? undefined
+          : parseUsd(flags["task-budget-usd"], "--task-budget-usd"),
+      apiKey,
+      upstreamUrl: readUpstreamUrl(),
     };
     if (!(await benchmark.evaluate(options))) process.exitCode = 1;
   },
@@ -76,9 +98,10 @@ const usage = [
   "Usage: evorca",
   `       evorca <${Object.keys(commands).join("|")}> --benchmark=<benchmark> [--scenario=<scenario>...]`,
   "       evorca evaluate --benchmark=<benchmark> --agent=<agent> [--scenario=<scenario>...]",
-  "                [--rows=<row>,...] [--jobs=<count>]",
+  "                [--rows=<row>,...] [--jobs=<count>] [--model=<model>] [--effort=<effort>]",
+  "                [--budget-usd=<dollars>] [--task-budget-usd=<dollars>]",
   "       evorca evaluate --benchmark=<benchmark> --resume=<run id> [--scenario=<scenario>...]",
-  "                [--jobs=<count>]",
+  "                [--jobs=<count>] [--budget-usd=<dollars>]",
 ].join("\n");
 
 const { positionals, values } = parseCommandLine();
@@ -128,6 +151,10 @@ type Flags = {
   readonly rows?: string | undefined;
   readonly jobs?: string | undefined;
   readonly resume?: string | undefined;
+  readonly model?: string | undefined;
+  readonly effort?: string | undefined;
+  readonly "budget-usd"?: string | undefined;
+  readonly "task-budget-usd"?: string | undefined;
 };
 
 function parseCommandLine() {
@@ -141,6 +168,10 @@ function parseCommandLine() {
         rows: { type: "string" },
         jobs: { type: "string" },
         resume: { type: "string" },
+        model: { type: "string" },
+        effort: { type: "string" },
+        "budget-usd": { type: "string" },
+        "task-budget-usd": { type: "string" },
       },
     });
   } catch (error: unknown) {
@@ -168,6 +199,27 @@ function parseCount(text: string, flag: string): number {
   if (!/^[1-9]\d*$/.test(text))
     fail(`${flag} must be a positive integer, not ${JSON.stringify(text)}.`);
   return Number(text);
+}
+
+function parseUsd(text: string, flag: string): number {
+  if (!/^\d+(\.\d+)?$/.test(text) || Number(text) <= 0) {
+    fail(`${flag} must be a positive number of US dollars, not ${JSON.stringify(text)}.`);
+  }
+  return Number(text);
+}
+
+function chooseEffort(text: string) {
+  const effort = efforts.find((candidate) => candidate === text);
+  if (effort === undefined) fail(`Unknown effort: ${text}. Choose from: ${efforts.join(", ")}`);
+  return effort;
+}
+
+function readUpstreamUrl(): string {
+  const url = process.env.EVORCA_UPSTREAM_URL ?? "https://api.anthropic.com";
+  if (!URL.canParse(url) || !/^https?:$/.test(new URL(url).protocol)) {
+    fail(`EVORCA_UPSTREAM_URL must be an http or https URL, not ${JSON.stringify(url)}.`);
+  }
+  return url;
 }
 
 function parseRunId(text: string): string {
