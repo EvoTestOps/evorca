@@ -1,5 +1,5 @@
 import { RGBA } from "@opentui/core";
-import type { TestRendererSetup } from "@opentui/core/testing";
+import { ManualClock, type TestRendererSetup } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
 import { act } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -11,17 +11,27 @@ const wordmark = [
   "█▄▄▄█ ▀▄ ▄▀ █   █ █    █     █▀▀▀█",
   "█▄▄▄▄  ▀▄▀  █▄▄▄█ █    █▄▄▄▄ █▄▄▄█",
 ];
-const placeholder = "Describe an incident to investigate";
+const firstExample = "Why did checkout p99 latency spike at 14:05?";
+const secondExample = "Find the root cause of the 5xx burst on payments";
 
 let setup: TestRendererSetup;
+let clock: ManualClock;
 let onExit: () => void;
 
 async function open(width = 100, height = 30, directory = "~/incidents") {
+  clock = new ManualClock();
   onExit = vi.fn();
   setup = await testRender(<Shell directory={directory} onExit={onExit} />, {
     width,
     height,
+    clock,
   });
+  await setup.renderOnce();
+  return setup.captureCharFrame();
+}
+
+async function at(ms: number) {
+  await act(async () => clock.setTime(ms));
   await setup.renderOnce();
   return setup.captureCharFrame();
 }
@@ -41,15 +51,16 @@ async function enter(line: string) {
   return setup.captureCharFrame();
 }
 
+function placeholder(frame: string) {
+  return /❯ (.*?) *│/.exec(frame)?.[1] ?? "";
+}
+
 function nonGrays() {
   return setup
     .captureSpans()
     .lines.flatMap((line) => line.spans)
     .flatMap((span) =>
-      [span.fg, span.bg].map((color) => ({
-        text: span.text,
-        rgb: color.toInts(),
-      })),
+      [span.fg, span.bg].map((color) => ({ text: span.text, rgb: color.toInts() })),
     )
     .filter(({ rgb: [r, g, b] }) => r !== g || g !== b);
 }
@@ -66,10 +77,12 @@ describe("palette", () => {
 describe("Shell", () => {
   afterEach(() => act(() => setup.dispose()));
 
-  it("draws only grays, at home and in the session", async () => {
+  it("draws only grays, at every stage of the animations and in the session", async () => {
     await open();
-    expect(nonGrays()).toEqual([]);
-
+    for (const ms of [100, 400, 1000, 2600, 3000]) {
+      await at(ms);
+      expect(nonGrays(), `${ms} ms`).toEqual([]);
+    }
     await enter("hello");
     await type("draft");
 
@@ -77,42 +90,74 @@ describe("Shell", () => {
   });
 
   it("shows the wordmark, the tagline, the input, the hints, and the footer at home", async () => {
-    const frame = await open();
+    await open();
+    const frame = await at(1000);
 
     for (const row of wordmark) expect(frame).toContain(row);
     expect(frame).toContain("autonomous incident investigation");
-    expect(frame).toMatch(new RegExp(`╭─+╮ *\n *│ ❯ ${placeholder}`));
+    expect(frame).toMatch(/╭─+╮ *\n *│ ❯ /);
     expect(frame).toContain("enter send   /help commands   ctrl+c exit");
     expect(frame).toMatch(new RegExp(`~/incidents +evorca v${packageJson.version}`));
   });
 
+  it("sweeps the wordmark in from the left", async () => {
+    await open();
+    const early = (await at(100))
+      .split("\n")
+      .find((line) => line.includes("█▀▀▀█"))
+      ?.trim();
+    const late = await at(1000);
+
+    expect(early).toBeDefined();
+    expect(wordmark[0]?.startsWith(early ?? "")).toBe(true);
+    expect(early).not.toBe(wordmark[0]);
+    expect(late).toContain(wordmark[0]);
+  });
+
   it("shows the plain name instead of the wordmark when the terminal is too narrow", async () => {
-    const frame = await open(30, 30);
+    await open(30, 30);
+    const frame = await at(1000);
 
     expect(frame).not.toContain("█");
     expect(frame).toMatch(/^ +evorca +$/m);
   });
 
   it("shortens the directory to its last folders when the footer is narrow", async () => {
-    const frame = await open(40, 30, "~/Documents/doctoral-research/evorca");
+    await open(40, 30, "~/Documents/doctoral-research/evorca");
+    const frame = await at(1000);
 
     expect(frame).toMatch(new RegExp(`^ +…/evorca +evorca v${packageJson.version} +$`, "m"));
   });
 
+  it("types out example questions while the input is empty", async () => {
+    await open();
+    const midway = placeholder(await at(1200));
+    const typed = placeholder(await at(3000));
+    const next = placeholder(await at(7000));
+
+    expect(midway.length).toBeGreaterThan(0);
+    expect(firstExample.startsWith(midway)).toBe(true);
+    expect(midway).not.toBe(firstExample);
+    expect(typed).toBe(firstExample);
+    expect(next).toBe(secondExample);
+  });
+
   it("moves to the session view on the first line and answers it", async () => {
     await open();
+    await at(1000);
     const frame = await enter("hello");
 
     expect(frame).not.toContain(wordmark[0]);
     expect(frame).not.toContain("autonomous incident investigation");
     expect(frame).toMatch(/┃ +hello +\n +┃ *\n *\n +┃ +No agent is connected yet\./);
-    expect(frame).toContain(`❯ ${placeholder}`);
+    expect(frame).toMatch(/│ ❯ +│/);
     expect(frame).toContain("enter send   /help commands   ctrl+c exit");
     expect(frame).toMatch(new RegExp(`~/incidents +evorca v${packageJson.version}`));
   });
 
   it("stays home on a blank line", async () => {
     await open();
+    await at(1000);
     const frame = await enter("   ");
 
     expect(frame).toContain(wordmark[0]);
@@ -142,6 +187,18 @@ describe("Shell", () => {
 
     expect(frame).not.toMatch(/┃ +one /);
     expect(frame).toMatch(/┃ +six /);
+  });
+
+  it("schedules no work while nothing moves", async () => {
+    await open();
+    await at(3000);
+    expect(clock.pendingTimerCount).toBeGreaterThan(0);
+
+    await enter("hello");
+    const typed = await type("draft");
+
+    expect(clock.pendingTimerCount).toBe(0);
+    expect(await at(20_000)).toBe(typed);
   });
 
   it("exits once on /exit", async () => {

@@ -5,6 +5,9 @@
  * transcript above an input box pinned to the bottom. It applies the outcome
  * that `commands.ts` returns for each line, and draws only grays.
  *
+ * One clock drives the animations in `motion.ts`. It ticks while one of them
+ * moves, sleeps until the next one moves, and stops when none will.
+ *
  * The JSX pragmas below repeat `tsconfig.json`, because `pnpm evorca` runs tsx
  * from the repository root, where tsx finds no `tsconfig.json`.
  *
@@ -21,10 +24,26 @@ import {
   type BorderCharacters,
   type InputRenderable,
 } from "@opentui/core";
-import { createRoot, useKeyboard, useTerminalDimensions } from "@opentui/react";
-import { memo, useRef, useState } from "react";
+import {
+  createRoot,
+  useAnimationTick,
+  useKeyboard,
+  useRenderer,
+  useTerminalDimensions,
+} from "@opentui/react";
+import { memo, useEffect, useRef, useState } from "react";
 import packageJson from "../package.json" with { type: "json" };
 import { submit, type Entry } from "./commands.js";
+import {
+  frameRate,
+  glint,
+  introDuration,
+  reveal,
+  sleep,
+  typewriter,
+  wordmarkFrame,
+  type Phase,
+} from "./motion.js";
 import { wordmark, wordmarkWidth, type Tone, type Weight } from "./wordmark.js";
 
 /**
@@ -50,10 +69,13 @@ type Voice = {
 type View =
   { readonly view: "home" } | { readonly view: "session"; readonly transcript: readonly Entry[] };
 
+type Draft =
+  | { readonly kind: "empty"; readonly typingFrom: number; readonly firstExample: number }
+  | { readonly kind: "text"; readonly nextExample: number };
+
 const gutter = 2;
 const promptWidth = 75;
 const tagline = "autonomous incident investigation";
-const placeholder = "Describe an incident to investigate";
 const version = `evorca v${packageJson.version}`;
 const hints = [
   ["enter", "send"],
@@ -80,9 +102,10 @@ const voices: Readonly<Record<Entry["role"], Voice>> = {
 };
 
 const background = RGBA.fromHex(palette.background);
+const brightest = RGBA.fromHex(palette.bright);
 const inks: Readonly<Record<Weight, RGBA>> = {
   light: RGBA.fromHex(palette.muted),
-  heavy: RGBA.fromHex(palette.bright),
+  heavy: brightest,
 };
 
 /**
@@ -105,14 +128,53 @@ export type ShellProps = { readonly directory: string; readonly onExit: () => vo
 
 /** The whole screen. It calls `onExit` on `/exit` and on ctrl+c. */
 export function Shell({ directory, onExit }: ShellProps) {
+  const renderer = useRenderer();
   const { width } = useTerminalDimensions();
+  const [start] = useState(() => renderer.clock.now());
   const [view, setView] = useState<View>({ view: "home" });
+  const [draft, setDraft] = useState<Draft>({
+    kind: "empty",
+    typingFrom: start + introDuration,
+    firstExample: 0,
+  });
+  const [, setFrame] = useState(start);
   const input = useRef<InputRenderable>(null);
+
+  const now = renderer.clock.now();
   const home = view.view === "home";
+  const showWordmark = home && width >= wordmarkWidth + 2 * gutter;
+  const mark = wordmarkFrame(now - start);
+  const placeholder =
+    draft.kind === "empty" ? typewriter(now - draft.typingFrom, draft.firstExample) : null;
+  const phases: Phase[] = [];
+  if (showWordmark) phases.push(mark.phase);
+  if (placeholder) phases.push(placeholder.phase);
+  const rest = sleep(phases);
+
+  useAnimationTick(rest === 0 ? frameRate : undefined, (_delta, _ticks, time) => setFrame(time));
+  useEffect(() => {
+    if (rest === 0 || rest === Infinity) return;
+    const timer = renderer.clock.setTimeout(() => setFrame(renderer.clock.now()), rest);
+    return () => renderer.clock.clearTimeout(timer);
+  }, [renderer, now, rest]);
 
   useKeyboard((key) => {
     if (key.ctrl && key.name === "c") onExit();
   });
+
+  function onInput(value: string) {
+    const time = renderer.clock.now();
+    setDraft((draft) => {
+      if (value === "") {
+        return draft.kind === "empty"
+          ? draft
+          : { kind: "empty", typingFrom: time, firstExample: draft.nextExample };
+      }
+      if (draft.kind === "text") return draft;
+      const shown = typewriter(time - draft.typingFrom, draft.firstExample);
+      return { kind: "text", nextExample: shown.example + 1 };
+    });
+  }
 
   function onSubmit(line: string) {
     if (input.current) input.current.value = "";
@@ -132,7 +194,7 @@ export function Shell({ directory, onExit }: ShellProps) {
         {view.view === "session" ? (
           <Transcript entries={view.transcript} />
         ) : (
-          <Masthead wide={width >= wordmarkWidth + 2 * gutter} />
+          <Masthead wordmarkAt={showWordmark ? mark.at : null} />
         )}
         <box
           flexDirection="column"
@@ -156,11 +218,12 @@ export function Shell({ directory, onExit }: ShellProps) {
               focused
               flexGrow={1}
               flexShrink={1}
-              placeholder={placeholder}
+              placeholder={placeholder?.text ?? ""}
               placeholderColor={palette.muted}
               textColor={palette.bright}
               focusedTextColor={palette.bright}
               cursorColor={palette.bright}
+              onInput={onInput}
               onSubmit={onSubmit}
             />
           </box>
@@ -173,39 +236,43 @@ export function Shell({ directory, onExit }: ShellProps) {
   );
 }
 
-function Masthead({ wide }: { readonly wide: boolean }) {
+const Masthead = memo(function Masthead({ wordmarkAt }: { readonly wordmarkAt: number | null }) {
   return (
     <box flexDirection="column" alignItems="center" flexShrink={0}>
-      {wide ? (
-        <Wordmark />
-      ) : (
+      {wordmarkAt === null ? (
         <text attributes={TextAttributes.BOLD}>
           <span fg={palette.muted}>evo</span>
           <span fg={palette.bright}>rca</span>
         </text>
+      ) : (
+        <Wordmark t={wordmarkAt} />
       )}
       <text fg={palette.muted} marginTop={1}>
         {tagline}
       </text>
     </box>
   );
-}
+});
 
-function Wordmark() {
+function Wordmark({ t }: { readonly t: number }) {
   return (
     <box flexDirection="column" flexShrink={0}>
       {wordmark.map((row, y) => (
         <text key={y}>
-          {row.map((cell, x) => (
-            <span
-              key={x}
-              fg={paint(cell.fg, cell.weight)}
-              bg={paint(cell.bg, cell.weight)}
-              attributes={cell.weight === "heavy" ? TextAttributes.BOLD : 0}
-            >
-              {cell.char}
-            </span>
-          ))}
+          {row.map((cell, x) => {
+            const shown = reveal(t, x, wordmarkWidth);
+            const lit = glint(t, x, wordmarkWidth);
+            return (
+              <span
+                key={x}
+                fg={paint(cell.fg, cell.weight, shown, lit)}
+                bg={paint(cell.bg, cell.weight, shown, lit)}
+                attributes={cell.weight === "heavy" ? TextAttributes.BOLD : 0}
+              >
+                {shown === 0 ? " " : cell.char}
+              </span>
+            );
+          })}
         </text>
       ))}
     </box>
@@ -268,9 +335,10 @@ function Footer({ directory, width }: { readonly directory: string; readonly wid
   );
 }
 
-function paint(tone: Tone, weight: Weight): RGBA {
+function paint(tone: Tone, weight: Weight, shown: number, lit: number): RGBA {
   if (tone === "background") return background;
-  return tone === "ink" ? inks[weight] : mix(background, inks[weight], 0.25);
+  const color = tone === "ink" ? inks[weight] : mix(background, inks[weight], 0.25);
+  return mix(background, mix(color, brightest, lit), shown);
 }
 
 function mix(from: RGBA, to: RGBA, t: number): RGBA {

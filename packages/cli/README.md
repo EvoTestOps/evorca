@@ -51,12 +51,12 @@ You need Node 26.4 or later, because OpenTUI calls its native library through `n
 pnpm evorca
 ```
 
-The shell opens on the home screen. Type a message and press Enter. After the first message, the transcript replaces the home screen. Each line you send appears in the transcript, followed by the reply. These commands are available:
+The shell opens on the home screen. The wordmark fades in from the left. While the input box is empty, its placeholder types out example questions. Type a message and press Enter. After the first message, the transcript replaces the home screen. Each line you send appears in the transcript, followed by the reply. These commands are available:
 
 - `/help` lists the commands.
 - `/exit` closes evorca. ctrl+c does the same.
 
-The shell paints the whole screen in grays on a near-black background, so it looks the same in light and dark terminals. When the terminal is narrower than the wordmark, the plain name replaces it. The shell needs an interactive terminal. When stdin or stdout is not one, as in `echo hi | pnpm evorca`, it prints `evorca needs an interactive terminal.` and exits with code 1.
+The shell paints the whole screen in grays on a near-black background, so it looks the same in light and dark terminals. When the terminal is narrower than the wordmark, the plain name replaces it. In the transcript view, nothing moves while the input box holds text, and the shell does no work until you type or resize the terminal. The shell needs an interactive terminal. When stdin or stdout is not one, as in `echo hi | pnpm evorca`, it prints `evorca needs an interactive terminal.` and exits with code 1.
 
 ## Fetch a scenario
 
