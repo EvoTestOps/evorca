@@ -43,8 +43,8 @@ OpenRCA publishes the predictions of its RCA-Agent and their scores in `rca/arch
 
 You need:
 
-- Node 22.12 or later. `.nvmrc` pins Node 22.
-- pnpm, through `corepack enable`.
+- Node 26.4 or later. `.nvmrc` pins Node 26.
+- pnpm, through `npm install -g corepack` and `corepack enable`.
 - [uv](https://docs.astral.sh/uv/). uv downloads Python 3.11 and the packages locked in `packages/openrca/evaluator/uv.lock`.
 - git.
 - Network access to github.com and drive.usercontent.google.com.
