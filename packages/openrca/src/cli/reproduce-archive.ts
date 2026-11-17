@@ -12,7 +12,7 @@
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { dataFileSha256, driveArchives, openRcaCommit, openRcaRepository } from "../pinned.js";
+import { answerKeyFiles, driveArchives, openRcaCommit, openRcaRepository } from "../pinned.js";
 import { openRcaScenarios, type OpenRcaScenario } from "../scenarios.js";
 import { reproduceArchive, type Mismatch, type Stage } from "../scoring/archive.js";
 import { evaluatorPython } from "../scoring/evaluator.js";
@@ -37,7 +37,7 @@ console.log(`OpenRCA ${openRcaRepository} at ${openRcaCommit}`);
 for (const [name, archive] of Object.entries(driveArchives)) {
   console.log(`Drive ${name} archive ${archive.driveId}, ${archive.bytes} bytes`);
 }
-for (const [file, sha256] of Object.entries(dataFileSha256)) {
+for (const [file, { sha256 }] of Object.entries(answerKeyFiles)) {
   console.log(`sha256 ${sha256}  ${file}`);
 }
 console.log(`node ${process.version}, ${uv}, ${python}`);

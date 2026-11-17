@@ -13,7 +13,8 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
-    "reproduce-archive": "tsx src/cli/reproduce-archive.ts"
+    "reproduce-archive": "tsx src/cli/reproduce-archive.ts",
+    "pin-telemetry": "tsx src/cli/pin-telemetry.ts"
   },
   "dependencies": {
     "@evorca/core": "workspace:*",

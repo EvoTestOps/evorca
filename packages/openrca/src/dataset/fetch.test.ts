@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -7,13 +7,22 @@ import { join } from "node:path";
 import { buffer } from "node:stream/consumers";
 import { describe, expect, it, onTestFinished } from "vitest";
 import yazl from "yazl";
-import { dataFileSha256, driveArchives } from "../pinned.js";
+import { driveArchives } from "../pinned.js";
 import { fetchOpenRcaData } from "./fetch.js";
 
 const query = Buffer.from('task_index,instruction,scoring_points\ntask_3,Find it.,"The only"\n');
 const record = Buffer.from("level,reason,component,timestamp,datetime\n");
+const metric = Buffer.from("timestamp,cmdb_id,kpi_name,value\n1647705600,node-1,cpu,0.5\n");
+const trace = Buffer.from("timestamp,cmdb_id,parent_id,span_id,trace_id,duration\n");
 
-const sha256 = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
+const telemetry = "Market/cloudbed-1/telemetry";
+const metricEntry = `${telemetry}/2022_03_20/metric/metric_app.csv`;
+const traceEntry = `${telemetry}/2022_03_21/trace/trace_span.csv`;
+
+const pin = (bytes: Buffer) => ({
+  bytes: bytes.length,
+  sha256: createHash("sha256").update(bytes).digest("hex"),
+});
 
 async function zipOf(files: Record<string, Buffer>): Promise<Buffer> {
   const zip = new yazl.ZipFile();
@@ -52,84 +61,167 @@ async function setUp({
   const zip = await zipOf({
     "Market/cloudbed-1/query.csv": queryCsv,
     "Market/cloudbed-1/record.csv": record,
+    "Market/cloudbed-1/.DS_Store": Buffer.from("finder"),
+    [`${telemetry}/.DS_Store`]: Buffer.from("finder"),
+    [`${telemetry}/2022_03_20/.DS_Store`]: Buffer.from("finder"),
+    [metricEntry]: metric,
+    [traceEntry]: trace,
+    [`${telemetry}/2022_03_21/metric/unpinned.csv`]: Buffer.from("a,b\n"),
+    "Market/cloudbed-2/telemetry/2022_03_20/metric/metric_app.csv": metric,
   });
   const server = await serve(zip, { reportedTotal });
   return {
     dataDir,
     server,
     archives: { ...driveArchives, Market: { url: server.url, bytes: zip.length } },
-    hashes: {
-      ...dataFileSha256,
-      "Market/cloudbed-1/query.csv": sha256(queryCsv),
-      "Market/cloudbed-1/record.csv": sha256(record),
+    files: {
+      "Market/cloudbed-1/query.csv": pin(queryCsv),
+      "Market/cloudbed-1/record.csv": pin(record),
+      [metricEntry]: pin(metric),
+      [traceEntry]: pin(trace),
+      "Market/cloudbed-2/telemetry/2022_03_20/metric/metric_app.csv": pin(metric),
     },
   };
 }
 
-describe("fetchOpenRcaData", () => {
-  it("extracts each file from the system's directory in its archive into the scenario's directory", async () => {
-    const { dataDir, archives, hashes } = await setUp();
-    const queryPath = join(dataDir, "market-cloudbed-1", "query.csv");
-    const recordPath = join(dataDir, "market-cloudbed-1", "record.csv");
+function fetchAll(options: Parameters<typeof fetchOpenRcaData>[0]) {
+  return Array.fromAsync(fetchOpenRcaData(options));
+}
 
-    expect(
-      await fetchOpenRcaData({
-        scenarios: ["market-cloudbed-1"],
-        dataDir,
-        archives,
-        sha256: hashes,
-      }),
-    ).toEqual([
-      { path: queryPath, bytes: query.length, sha256: sha256(query), fetched: true },
-      { path: recordPath, bytes: record.length, sha256: sha256(record), fetched: true },
+async function filesIn(dir: string): Promise<string[]> {
+  const entries = await readdir(dir, { recursive: true, withFileTypes: true });
+  return entries
+    .filter((entry) => entry.isFile())
+    .map((entry) => join(entry.parentPath, entry.name))
+    .sort();
+}
+
+describe("fetchOpenRcaData", () => {
+  it("writes each pinned file of the scenario below the scenario's directory and nothing else", async () => {
+    const { dataDir, archives, files } = await setUp();
+    const scenarioDir = join(dataDir, "market-cloudbed-1");
+    const expected = [
+      { path: join(scenarioDir, "query.csv"), contents: query },
+      { path: join(scenarioDir, "record.csv"), contents: record },
+      {
+        path: join(scenarioDir, "telemetry", "2022_03_20", "metric", "metric_app.csv"),
+        contents: metric,
+      },
+      {
+        path: join(scenarioDir, "telemetry", "2022_03_21", "trace", "trace_span.csv"),
+        contents: trace,
+      },
+    ];
+
+    const progress = await fetchAll({ scenarios: ["market-cloudbed-1"], dataDir, archives, files });
+
+    expect(progress).toEqual(
+      expected.flatMap(({ path, contents }) => [
+        { status: "fetching", path, ...pin(contents) },
+        { status: "fetched", path, ...pin(contents) },
+      ]),
+    );
+    expect(await filesIn(dataDir)).toEqual(expected.map(({ path }) => path).sort());
+    for (const { path, contents } of expected) expect(await readFile(path)).toEqual(contents);
+  });
+
+  it("writes each scenario of a shared archive to its own directory", async () => {
+    const { dataDir, archives, files } = await setUp();
+
+    const progress = await fetchAll({
+      scenarios: ["market-cloudbed-2", "market-cloudbed-1"],
+      dataDir,
+      archives,
+      files,
+    });
+
+    const cloudbed2Metric = join(
+      dataDir,
+      "market-cloudbed-2",
+      "telemetry",
+      "2022_03_20",
+      "metric",
+      "metric_app.csv",
+    );
+    expect(progress.filter((file) => file.status === "fetched").map((file) => file.path)).toEqual([
+      cloudbed2Metric,
+      join(dataDir, "market-cloudbed-1", "query.csv"),
+      join(dataDir, "market-cloudbed-1", "record.csv"),
+      join(dataDir, "market-cloudbed-1", "telemetry", "2022_03_20", "metric", "metric_app.csv"),
+      join(dataDir, "market-cloudbed-1", "telemetry", "2022_03_21", "trace", "trace_span.csv"),
     ]);
-    expect(await readFile(queryPath)).toEqual(query);
-    expect(await readFile(recordPath)).toEqual(record);
+    expect(await readFile(cloudbed2Metric)).toEqual(metric);
   });
 
   it("keeps files that are already present without downloading them again", async () => {
-    const { dataDir, server, archives, hashes } = await setUp();
-    await fetchOpenRcaData({ scenarios: ["market-cloudbed-1"], dataDir, archives, sha256: hashes });
+    const { dataDir, server, archives, files } = await setUp();
+    await fetchAll({ scenarios: ["market-cloudbed-1"], dataDir, archives, files });
     const requests = server.requests();
 
-    const again = await fetchOpenRcaData({
-      scenarios: ["market-cloudbed-1"],
-      dataDir,
-      archives,
-      sha256: hashes,
-    });
+    const again = await fetchAll({ scenarios: ["market-cloudbed-1"], dataDir, archives, files });
 
-    expect(again.map((file) => file.fetched)).toEqual([false, false]);
+    expect(again.map((file) => file.status)).toEqual(["present", "present", "present", "present"]);
     expect(server.requests()).toBe(requests);
   });
 
   it("rejects a download whose hash differs from the pinned hash and writes nothing", async () => {
-    const { dataDir, archives, hashes } = await setUp();
-    const wrong = { ...hashes, "Market/cloudbed-1/query.csv": sha256(Buffer.from("other")) };
+    const { dataDir, archives, files } = await setUp();
+    const wrong = { ...files, "Market/cloudbed-1/query.csv": pin(Buffer.from("other")) };
 
     await expect(
-      fetchOpenRcaData({ scenarios: ["market-cloudbed-1"], dataDir, archives, sha256: wrong }),
+      fetchAll({ scenarios: ["market-cloudbed-1"], dataDir, archives, files: wrong }),
     ).rejects.toThrow("Market/cloudbed-1/query.csv");
-    const entries = await readdir(dataDir, { recursive: true, withFileTypes: true });
-    expect(entries.filter((entry) => entry.isFile())).toEqual([]);
+    expect(await filesIn(dataDir)).toEqual([]);
+  });
+
+  it("names a present file that differs from the pinned file and downloads nothing", async () => {
+    const { dataDir, server, archives, files } = await setUp();
+    await fetchAll({ scenarios: ["market-cloudbed-1"], dataDir, archives, files });
+    const changed = join(
+      dataDir,
+      "market-cloudbed-1",
+      "telemetry",
+      "2022_03_20",
+      "metric",
+      "metric_app.csv",
+    );
+    await writeFile(changed, "edited\n");
+    await rm(join(dataDir, "market-cloudbed-1", "telemetry", "2022_03_21"), { recursive: true });
+    const requests = server.requests();
+
+    await expect(
+      fetchAll({ scenarios: ["market-cloudbed-1"], dataDir, archives, files }),
+    ).rejects.toThrow(changed);
+    expect(server.requests()).toBe(requests);
+  });
+
+  it("refuses to download anything when the missing files need more than the free space", async () => {
+    const { dataDir, server, archives, files } = await setUp();
+    const huge = { ...files, [traceEntry]: { ...pin(trace), bytes: 10 ** 18 } };
+
+    await expect(
+      fetchAll({ scenarios: ["market-cloudbed-1"], dataDir, archives, files: huge }),
+    ).rejects.toThrow(/need 1000000000\.\d\d GB, but .* has \d+\.\d\d GB free/);
+    expect(server.requests()).toBe(0);
+    expect(await filesIn(dataDir)).toEqual([]);
   });
 
   it("streams an entry larger than the 1 MiB read window", async () => {
     const queryCsv = randomBytes(3 * 1024 * 1024);
-    const { dataDir, archives, hashes } = await setUp({ queryCsv });
+    const { dataDir, archives, files } = await setUp({ queryCsv });
 
-    await fetchOpenRcaData({ scenarios: ["market-cloudbed-1"], dataDir, archives, sha256: hashes });
+    await fetchAll({ scenarios: ["market-cloudbed-1"], dataDir, archives, files });
 
-    expect(sha256(await readFile(join(dataDir, "market-cloudbed-1", "query.csv")))).toBe(
-      sha256(queryCsv),
+    expect(pin(await readFile(join(dataDir, "market-cloudbed-1", "query.csv")))).toEqual(
+      pin(queryCsv),
     );
   });
 
   it("rejects an archive whose size differs from the pinned size", async () => {
-    const { dataDir, server, archives, hashes } = await setUp({ reportedTotal: 1_000_000 });
+    const { dataDir, server, archives, files } = await setUp({ reportedTotal: 1_000_000 });
 
     await expect(
-      fetchOpenRcaData({ scenarios: ["market-cloudbed-1"], dataDir, archives, sha256: hashes }),
+      fetchAll({ scenarios: ["market-cloudbed-1"], dataDir, archives, files }),
     ).rejects.toThrow(server.url);
   });
 });

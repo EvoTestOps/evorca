@@ -1,17 +1,17 @@
 # @evorca/openrca
 
-OpenRCA benchmark support for evorca. It reads [OpenRCA](https://github.com/microsoft/OpenRCA) tasks, writes predictions in OpenRCA's format, fetches the answer keys, and scores predictions with the official OpenRCA evaluator.
+OpenRCA benchmark support for evorca. It reads [OpenRCA](https://github.com/microsoft/OpenRCA) tasks, writes predictions in OpenRCA's format, fetches each scenario's answer keys and telemetry, and scores predictions with the official OpenRCA evaluator.
 
 ## Scope
 
 - Naming the four OpenRCA scenarios, `bank`, `telecom`, `market-cloudbed-1`, and `market-cloudbed-2`, after the Bank, Telecom, Market/cloudbed-1, and Market/cloudbed-2 systems, and reading the tasks in each scenario's `query.csv`.
 - Converting a `Diagnosis` from `@evorca/core` to and from OpenRCA's prediction JSON. OpenRCA datetimes are wall-clock times at UTC+8.
-- Fetching `query.csv` and `record.csv` from the published dataset archives and checking each file against its SHA-256 in `src/pinned.ts`.
+- Fetching each scenario's answer keys, `query.csv` and `record.csv`, and its telemetry, the logs, metrics, and traces, from the published dataset archives. Each file must match its size and SHA-256 in `src/pinned.ts` or `src/pinned-telemetry.json`.
 - Scoring a prediction CSV with OpenRCA's own `main/evaluate.py` at a pinned commit, in the Python environment locked in `evaluator/uv.lock`.
 
 ## Non-goals
 
-- The logs, metrics, and traces in the OpenRCA dataset. `fetchOpenRcaData` downloads only `query.csv` and `record.csv`.
+- Parsing the telemetry. `fetchOpenRcaData` writes the CSV files as OpenRCA publishes them, and the agent reads them.
 - A command line. `pnpm evorca fetch` from [`@evorca/cli`](../cli/README.md) downloads the data.
 - Running an agent.
 - A second implementation of the evaluator. Every score comes from OpenRCA's own code.
@@ -31,7 +31,7 @@ OpenRCA benchmark support for evorca. It reads [OpenRCA](https://github.com/micr
 
 `src/dataset/index.ts` is the entry for a tool that downloads the dataset, such as `evorca fetch`.
 
-- `fetchOpenRcaData({ scenarios, dataDir })` makes sure that `query.csv` and `record.csv` of each scenario exist in `<dataDir>/<scenario>/` and match their hashes in `src/pinned.ts`. It returns one entry per file with its `path`, its size in `bytes`, its `sha256`, and whether it `fetched` the file.
+- `fetchOpenRcaData({ scenarios, dataDir })` makes sure that the answer keys and the telemetry of each scenario exist in `<dataDir>/<scenario>/` and match their pinned size and SHA-256. It is an async generator that yields a `FileProgress` for each file: `present` for a file that is already there, `fetching` when a download starts, and `fetched` when the download matches and has its final name. Each `FileProgress` has the file's `path` and its pinned `bytes` and `sha256`. It throws before any download if a file on disk does not match, or if the missing files need more than the free space in `dataDir`.
 
 ### `@evorca/openrca/scoring`
 
@@ -39,6 +39,19 @@ OpenRCA benchmark support for evorca. It reads [OpenRCA](https://github.com/micr
 
 - `scoreWithOfficialEvaluator({ predictionsPath, scenario, dataDir, cacheDir })` scores a prediction CSV and returns one `ScoredRow` per task.
 - `summarize(rows)` returns a `Summary` with the strict and partial `Accuracy` for each `Difficulty` and in total.
+
+## Lay out a scenario's data
+
+`fetchOpenRcaData` writes each scenario to its own directory. The answer keys sit beside the telemetry:
+
+```text
+<dataDir>/<scenario>/
+  query.csv
+  record.csv
+  telemetry/<YYYY_MM_DD>/<log|metric|trace>/<file>.csv
+```
+
+Mount only `<scenario>/telemetry/` into an agent's container. `query.csv` and `record.csv` hold the answers, so they stay on the host.
 
 ## Write predictions
 
@@ -61,15 +74,27 @@ A task with no entry in `diagnoses` gets the empty prediction `{}`, which scores
 
 ## Fetch the data
 
-OpenRCA publishes its dataset on Google Drive as three zip archives of about 3 GB each. `fetchOpenRcaData` reads only `query.csv` and `record.csv` out of the archives, through HTTP Range requests, and checks each file against its SHA-256 in `src/pinned.ts` before it keeps the file. `query.csv` holds the tasks and their scoring points. `record.csv` lists the failures behind them.
+OpenRCA publishes its dataset on Google Drive as three zip archives of about 3 GB each. `fetchOpenRcaData` reads only the files it needs out of the archives, through HTTP Range requests, and checks each file against its pinned size and SHA-256 before it keeps the file. `query.csv` holds the tasks and their scoring points. `record.csv` lists the failures behind them. The telemetry is much larger once unpacked:
+
+| Scenario          | Telemetry files | Telemetry size | Kinds              |
+| ----------------- | --------------: | -------------: | ------------------ |
+| bank              |              40 |       26.40 GB | log, metric, trace |
+| telecom           |              90 |       17.66 GB | metric, trace      |
+| market-cloudbed-1 |              16 |       11.94 GB | log, metric, trace |
+| market-cloudbed-2 |              16 |       12.66 GB | log, metric, trace |
+| All scenarios     |             162 |       68.65 GB |                    |
 
 You need network access to drive.usercontent.google.com. From the repository root, run:
 
 ```sh
-pnpm evorca fetch --benchmark=openrca
+pnpm evorca fetch --benchmark=openrca --scenario=telecom
 ```
 
-The command writes `data/benchmarks/openrca/<scenario>/query.csv` and `data/benchmarks/openrca/<scenario>/record.csv` and prints one line per file. To fetch only some scenarios, name each one with `--scenario`, as in `pnpm evorca fetch --benchmark=openrca --scenario=telecom`. A file that is already present and matches its hash stays as it is, so a second run downloads nothing. If a file on disk does not match, the command fails and names the file to delete.
+The command writes the answer keys and the telemetry of `telecom` to `data/benchmarks/openrca/telecom/`. To fetch more scenarios, repeat `--scenario`. To fetch all four, leave it out. The command prints a line when a download starts and a line when it is done, and one line for each file that is already present.
+
+Before it downloads anything, the command checks the files that are present and compares the size of the missing files with the free space in `data/benchmarks/openrca/`. If a file on disk does not match, the command fails and names the file to delete. If the missing files do not fit, it fails and prints both sizes in GB. A file that is present and matches stays as it is, so a second run downloads nothing.
+
+The archives also hold `.DS_Store` files, which the command skips. `pnpm --filter @evorca/openrca pin-telemetry` reads every telemetry file in the archives once and writes its size and SHA-256 to `src/pinned-telemetry.json`. Like the other pins in `src/pinned.ts`, change that file only together with the expected results below.
 
 ## Score predictions
 
@@ -101,6 +126,7 @@ You need:
 - [uv](https://docs.astral.sh/uv/). uv downloads Python 3.11 and the packages locked in `evaluator/uv.lock`.
 - git.
 - Network access to github.com and drive.usercontent.google.com.
+- 68.65 GB of free disk space. `evorca fetch` downloads the telemetry of all four scenarios, although `reproduce-archive` reads only `query.csv` and `record.csv`.
 
 From a fresh clone, run:
 

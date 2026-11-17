@@ -35,10 +35,13 @@ if (!scenarios.every((scenario) => isKeyOf(benchmark.scenarios, scenario))) {
 }
 
 const dataDir = fileURLToPath(new URL(`../../../data/benchmarks/${name}/`, import.meta.url));
-for (const file of await benchmark.fetch({ scenarios, dataDir })) {
-  const status = file.fetched ? "fetched" : "present";
-  const path = relative(process.cwd(), file.path);
-  console.log(`${status}  ${path}  ${file.bytes} bytes  sha256 ${file.sha256}`);
+try {
+  for await (const { status, path, bytes, sha256 } of benchmark.fetch({ scenarios, dataDir })) {
+    const hash = status === "fetching" ? "" : `  sha256 ${sha256}`;
+    console.log(`${status}  ${relative(process.cwd(), path)}  ${bytes} bytes${hash}`);
+  }
+} catch (error: unknown) {
+  fail(error instanceof Error ? error.message : String(error));
 }
 
 function parseCommandLine() {

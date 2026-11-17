@@ -35,8 +35,3 @@ export function scenarioPath(
 ): string {
   return join(dataDir, scenario, file);
 }
-
-/** The name of a scenario's file inside its published archive, such as `Market/cloudbed-1/query.csv`. */
-export function archiveEntry(scenario: OpenRcaScenario, file: ScenarioFile) {
-  return `${openRcaScenarios[scenario]}/${file}` as const;
-}
