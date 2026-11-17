@@ -10,7 +10,9 @@ import { parse } from "csv-parse/sync";
 
 /**
  * Parses CSV text into one record per data row, in file order, keyed by the column
- * names in its first row, which must include every name in `columns`.
+ * names in its first row, which must include every name in `columns`. It skips
+ * empty lines, as the evaluator's pandas does, because Telecom's `record.csv`
+ * ends with one.
  *
  * @throws Error if the header lacks one of `columns` or the text is not valid CSV.
  */
@@ -19,6 +21,7 @@ export function parseCsv<const C extends string>(
   columns: readonly C[],
 ): Record<C, string>[] {
   const records = parse<Record<string, string>>(text, {
+    skip_empty_lines: true,
     columns: (header: string[]) => {
       const missing = columns.filter((column) => !header.includes(column));
       if (missing.length > 0) throw new Error(`CSV is missing columns: ${missing.join(", ")}`);

@@ -13,7 +13,8 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
-    "pin-telemetry": "tsx scripts/pin-telemetry.ts"
+    "pin-telemetry": "tsx scripts/pin-telemetry.ts",
+    "extract-candidates": "tsx scripts/extract-candidates.ts"
   },
   "dependencies": {
     "@evorca/core": "workspace:*",
@@ -24,6 +25,7 @@
   "devDependencies": {
     "@types/yauzl": "^3.4.0",
     "@types/yazl": "^3.3.1",
+    "prettier": "^3.9.10",
     "tsx": "^4.23.15",
     "yazl": "^3.3.1"
   }
