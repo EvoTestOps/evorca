@@ -14,23 +14,33 @@ async function evorca(...args: string[]) {
   );
 }
 
-describe("evorca fetch", () => {
+describe("evorca", () => {
+  it("exits with code 1 and lists the commands for an unknown command", async () => {
+    const { code, stderr } = await evorca("nope", "--benchmark=openrca");
+
+    expect(code).toBe(1);
+    expect(stderr).toContain("fetch");
+    expect(stderr).toContain("reproduce");
+  });
+});
+
+describe.each(["fetch", "reproduce"])("evorca %s", (command) => {
   it("exits with code 1 and lists the benchmarks for an unknown benchmark", async () => {
-    const { code, stderr } = await evorca("fetch", "--benchmark=nope");
+    const { code, stderr } = await evorca(command, "--benchmark=nope");
 
     expect(code).toBe(1);
     expect(stderr).toContain("openrca");
   });
 
   it("exits with code 1 and lists the benchmarks without --benchmark", async () => {
-    const { code, stderr } = await evorca("fetch", "--scenario=bank");
+    const { code, stderr } = await evorca(command, "--scenario=bank");
 
     expect(code).toBe(1);
     expect(stderr).toContain("openrca");
   });
 
   it("exits with code 1 and lists the scenarios for an unknown scenario", async () => {
-    const { code, stderr } = await evorca("fetch", "--benchmark=openrca", "--scenario=nope");
+    const { code, stderr } = await evorca(command, "--benchmark=openrca", "--scenario=nope");
 
     expect(code).toBe(1);
     for (const scenario of ["bank", "telecom", "market-cloudbed-1", "market-cloudbed-2"]) {
