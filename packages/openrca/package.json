@@ -7,12 +7,12 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./dataset": "./src/dataset/index.ts",
     "./scoring": "./src/scoring/index.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
-    "fetch-data": "tsx src/cli/fetch-data.ts",
     "reproduce-archive": "tsx src/cli/reproduce-archive.ts"
   },
   "dependencies": {

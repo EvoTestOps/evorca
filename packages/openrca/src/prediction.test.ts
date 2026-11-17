@@ -44,7 +44,7 @@ describe("predictions", () => {
 
   it("are written one row per task in order, empty where no diagnosis exists", () => {
     const tasks: OpenRcaTask[] = [0, 1, 2].map((row) => ({
-      system: "Telecom",
+      scenario: "telecom",
       row,
       taskIndex: "task_3",
       instruction: "Find the component.",

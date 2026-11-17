@@ -40,7 +40,7 @@ async function serve(body: Buffer, { reportedTotal = body.length } = {}) {
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   onTestFinished(() => new Promise<void>((resolve) => server.close(() => resolve())));
   const { port } = server.address() as AddressInfo;
-  return { url: `http://127.0.0.1:${port}/telecom.zip`, requests: () => requests };
+  return { url: `http://127.0.0.1:${port}/market.zip`, requests: () => requests };
 }
 
 async function setUp({
@@ -49,41 +49,51 @@ async function setUp({
 }: { queryCsv?: Buffer; reportedTotal?: number } = {}) {
   const dataDir = await mkdtemp(join(tmpdir(), "openrca-"));
   onTestFinished(() => rm(dataDir, { recursive: true }));
-  const zip = await zipOf({ "Telecom/query.csv": queryCsv, "Telecom/record.csv": record });
+  const zip = await zipOf({
+    "Market/cloudbed-1/query.csv": queryCsv,
+    "Market/cloudbed-1/record.csv": record,
+  });
   const server = await serve(zip, { reportedTotal });
   return {
     dataDir,
     server,
-    archives: { ...driveArchives, Telecom: { url: server.url, bytes: zip.length } },
+    archives: { ...driveArchives, Market: { url: server.url, bytes: zip.length } },
     hashes: {
       ...dataFileSha256,
-      "Telecom/query.csv": sha256(queryCsv),
-      "Telecom/record.csv": sha256(record),
+      "Market/cloudbed-1/query.csv": sha256(queryCsv),
+      "Market/cloudbed-1/record.csv": sha256(record),
     },
   };
 }
 
 describe("fetchOpenRcaData", () => {
-  it("extracts each file from its archive and checks its hash", async () => {
+  it("extracts each file from the system's directory in its archive into the scenario's directory", async () => {
     const { dataDir, archives, hashes } = await setUp();
+    const queryPath = join(dataDir, "market-cloudbed-1", "query.csv");
+    const recordPath = join(dataDir, "market-cloudbed-1", "record.csv");
 
     expect(
-      await fetchOpenRcaData({ systems: ["Telecom"], dataDir, archives, sha256: hashes }),
+      await fetchOpenRcaData({
+        scenarios: ["market-cloudbed-1"],
+        dataDir,
+        archives,
+        sha256: hashes,
+      }),
     ).toEqual([
-      { file: "Telecom/query.csv", bytes: query.length, sha256: sha256(query), fetched: true },
-      { file: "Telecom/record.csv", bytes: record.length, sha256: sha256(record), fetched: true },
+      { path: queryPath, bytes: query.length, sha256: sha256(query), fetched: true },
+      { path: recordPath, bytes: record.length, sha256: sha256(record), fetched: true },
     ]);
-    expect(await readFile(join(dataDir, "Telecom", "query.csv"))).toEqual(query);
-    expect(await readFile(join(dataDir, "Telecom", "record.csv"))).toEqual(record);
+    expect(await readFile(queryPath)).toEqual(query);
+    expect(await readFile(recordPath)).toEqual(record);
   });
 
   it("keeps files that are already present without downloading them again", async () => {
     const { dataDir, server, archives, hashes } = await setUp();
-    await fetchOpenRcaData({ systems: ["Telecom"], dataDir, archives, sha256: hashes });
+    await fetchOpenRcaData({ scenarios: ["market-cloudbed-1"], dataDir, archives, sha256: hashes });
     const requests = server.requests();
 
     const again = await fetchOpenRcaData({
-      systems: ["Telecom"],
+      scenarios: ["market-cloudbed-1"],
       dataDir,
       archives,
       sha256: hashes,
@@ -95,11 +105,11 @@ describe("fetchOpenRcaData", () => {
 
   it("rejects a download whose hash differs from the pinned hash and writes nothing", async () => {
     const { dataDir, archives, hashes } = await setUp();
-    const wrong = { ...hashes, "Telecom/query.csv": sha256(Buffer.from("other")) };
+    const wrong = { ...hashes, "Market/cloudbed-1/query.csv": sha256(Buffer.from("other")) };
 
     await expect(
-      fetchOpenRcaData({ systems: ["Telecom"], dataDir, archives, sha256: wrong }),
-    ).rejects.toThrow("Telecom/query.csv");
+      fetchOpenRcaData({ scenarios: ["market-cloudbed-1"], dataDir, archives, sha256: wrong }),
+    ).rejects.toThrow("Market/cloudbed-1/query.csv");
     const entries = await readdir(dataDir, { recursive: true, withFileTypes: true });
     expect(entries.filter((entry) => entry.isFile())).toEqual([]);
   });
@@ -108,16 +118,18 @@ describe("fetchOpenRcaData", () => {
     const queryCsv = randomBytes(3 * 1024 * 1024);
     const { dataDir, archives, hashes } = await setUp({ queryCsv });
 
-    await fetchOpenRcaData({ systems: ["Telecom"], dataDir, archives, sha256: hashes });
+    await fetchOpenRcaData({ scenarios: ["market-cloudbed-1"], dataDir, archives, sha256: hashes });
 
-    expect(sha256(await readFile(join(dataDir, "Telecom", "query.csv")))).toBe(sha256(queryCsv));
+    expect(sha256(await readFile(join(dataDir, "market-cloudbed-1", "query.csv")))).toBe(
+      sha256(queryCsv),
+    );
   });
 
   it("rejects an archive whose size differs from the pinned size", async () => {
     const { dataDir, server, archives, hashes } = await setUp({ reportedTotal: 1_000_000 });
 
     await expect(
-      fetchOpenRcaData({ systems: ["Telecom"], dataDir, archives, sha256: hashes }),
+      fetchOpenRcaData({ scenarios: ["market-cloudbed-1"], dataDir, archives, sha256: hashes }),
     ).rejects.toThrow(server.url);
   });
 });
