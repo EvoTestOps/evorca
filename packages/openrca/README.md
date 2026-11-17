@@ -8,11 +8,12 @@ OpenRCA benchmark support for evorca. It reads [OpenRCA](https://github.com/micr
 - Converting a `Diagnosis` from `@evorca/core` to and from OpenRCA's prediction JSON. OpenRCA datetimes are wall-clock times at UTC+8.
 - Fetching `query.csv` and `record.csv` from the published dataset archives and checking each file against its SHA-256 in `src/pinned.ts`.
 - Scoring a prediction CSV with OpenRCA's own `main/evaluate.py` at a pinned commit, in the Python environment locked in `evaluator/uv.lock`.
+- Reproducing the scores in OpenRCA's archive of RCA-Agent predictions with that evaluator.
 
 ## Non-goals
 
 - The logs, metrics, and traces in the OpenRCA dataset. `fetchOpenRcaData` downloads only `query.csv` and `record.csv`.
-- A command line. `pnpm evorca fetch` from [`@evorca/cli`](../cli/README.md) downloads the data.
+- A command line. `pnpm evorca fetch` and `pnpm evorca reproduce` from [`@evorca/cli`](../cli/README.md) download the data and reproduce the archive scores.
 - Running an agent.
 - A second implementation of the evaluator. Every score comes from OpenRCA's own code.
 
@@ -39,6 +40,9 @@ OpenRCA benchmark support for evorca. It reads [OpenRCA](https://github.com/micr
 
 - `scoreWithOfficialEvaluator({ predictionsPath, scenario, dataDir, cacheDir })` scores a prediction CSV and returns one `ScoredRow` per task.
 - `summarize(rows)` returns a `Summary` with the strict and partial `Accuracy` for each `Difficulty` and in total.
+- `reproduceArchive({ scenario, dataDir, cacheDir })` scores the archived RCA-Agent predictions of one scenario in two stages. It returns the number of `tasks` and one `Stage` for each stage, `published` and `roundTripped`. A `Stage` holds one `ScoredRow` per task and one `Mismatch` per score that differs from the archive.
+- `evaluatorVersions(cacheDir)` returns the `--version` output of uv and of the evaluator's Python.
+- `pinnedInputs` holds the OpenRCA repository and commit, the Drive archives, and the SHA-256 of each answer key, for a report that names what produced its scores.
 
 ## Write predictions
 
@@ -92,25 +96,20 @@ Strict accuracy is the share of tasks with a score of 1. Partial accuracy is the
 
 ## Reproduce the archive scores
 
-OpenRCA publishes the predictions of its RCA-Agent in `rca/archive/`. `reproduce-archive` scores the archived predictions of each scenario twice with the official evaluator. Stage 1 scores the predictions as published. Stage 2 scores them after a round trip through `parsePrediction`, `formatPrediction`, and `writePredictions`. In both stages, each row's score must equal the archived score rounded to two decimals, because the evaluator rounds its scores to two decimals. The command lists every mismatch and exits with code 1 if it finds one.
+OpenRCA publishes the predictions of its RCA-Agent in `rca/archive/`. `reproduceArchive` scores the archived predictions of one scenario twice with the official evaluator. Stage 1 scores the predictions as published. Stage 2 scores them after a round trip through `parsePrediction`, `formatPrediction`, and `writePredictions`. In both stages, each row's score must equal the archived score rounded to two decimals, because the evaluator rounds its scores to two decimals. Each `Mismatch` names a row whose score differs.
 
-You need:
+```ts
+import { reproduceArchive } from "@evorca/openrca/scoring";
 
-- Node 22.12 or later. `.nvmrc` pins Node 22.
-- pnpm, through `corepack enable`.
-- [uv](https://docs.astral.sh/uv/). uv downloads Python 3.11 and the packages locked in `evaluator/uv.lock`.
-- git.
-- Network access to github.com and drive.usercontent.google.com.
-
-From a fresh clone, run:
-
-```sh
-pnpm install
-pnpm evorca fetch --benchmark=openrca
-pnpm --filter @evorca/openrca reproduce-archive
+const { tasks, roundTripped } = await reproduceArchive({
+  scenario: "telecom",
+  dataDir: "data/benchmarks/openrca",
+  cacheDir: ".cache",
+});
+console.log(`${roundTripped.mismatches.length} of ${tasks} scores differ after the round trip`);
 ```
 
-`evorca fetch` writes to `data/benchmarks/openrca/`. `reproduce-archive` checks out OpenRCA and creates the Python environment in `.cache/openrca/`. Both commands skip work that a previous run finished. `reproduce-archive` prints the pinned inputs and the Node, uv, and Python versions first, then one block per scenario. The expected result is:
+Like `scoreWithOfficialEvaluator`, the first call needs git, uv, and network access to github.com. To check every scenario and print a report, run [`evorca reproduce`](../cli/README.md#reproduce-the-archive-scores) from the repository root. The expected result is:
 
 | Scenario          | Rows | Stage 1 matches | Stage 2 matches | Strict accuracy | Partial accuracy |
 | ----------------- | ---: | --------------: | --------------: | --------------: | ---------------: |

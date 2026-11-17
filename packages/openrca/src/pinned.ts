@@ -65,3 +65,11 @@ export const dataFileSha256: Record<DataFile, string> = {
   "Market/cloudbed-2/record.csv":
     "b12d8c91518cf31e10fdce3ce2e6d38fe259013b73ed9460635022afc12f6162",
 };
+
+/** The pins in this module as one record, for a report that names what produced its scores. */
+export const pinnedInputs = {
+  repository: openRcaRepository,
+  commit: openRcaCommit,
+  driveArchives,
+  answerKeySha256: dataFileSha256,
+};
