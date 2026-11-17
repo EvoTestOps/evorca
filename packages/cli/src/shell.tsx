@@ -1,7 +1,7 @@
 /**
- * The interactive shell that `evorca` opens: a banner, the transcript, and an
- * input box pinned to the bottom of the screen. It applies the outcome that
- * `commands.ts` returns for each submitted line.
+ * The interactive shell that `evorca` opens without arguments: a banner, the
+ * transcript, and an input box pinned to the bottom of the screen. It applies
+ * the outcome that `commands.ts` returns for each submitted line.
  *
  * The JSX pragmas below repeat `tsconfig.json`, because `pnpm evorca` runs tsx
  * from the repository root, where tsx finds no `tsconfig.json`.
@@ -10,8 +10,10 @@
  */
 // @jsxRuntime automatic
 // @jsxImportSource @opentui/react
-import { RGBA, TextAttributes, type InputRenderable } from "@opentui/core";
-import { useKeyboard, useTerminalDimensions } from "@opentui/react";
+import { homedir } from "node:os";
+import { sep } from "node:path";
+import { createCliRenderer, RGBA, TextAttributes, type InputRenderable } from "@opentui/core";
+import { createRoot, useKeyboard, useTerminalDimensions } from "@opentui/react";
 import { useRef, useState } from "react";
 import packageJson from "../package.json" with { type: "json" };
 import { banner } from "./banner.js";
@@ -30,6 +32,17 @@ const bannerWidth = Math.max(...banner.map((row) => row.length));
 const bannerColors = banner.map((_, row) =>
   mix(RGBA.fromHex(colors.accent), RGBA.fromHex(colors.accentEnd), row / (banner.length - 1)),
 );
+
+/**
+ * Draws the shell full screen for the working directory. The shell runs until
+ * the user exits it.
+ */
+export async function openShell(): Promise<void> {
+  const renderer = await createCliRenderer({ exitOnCtrlC: false, useMouse: false });
+  createRoot(renderer).render(
+    <Shell directory={tildify(process.cwd())} onExit={() => renderer.destroy()} />,
+  );
+}
 
 /** The props of {@link Shell}. `directory` is the working directory as the user should read it. */
 export type ShellProps = { readonly directory: string; readonly onExit: () => void };
@@ -127,4 +140,9 @@ function Header({ directory }: { readonly directory: string }) {
 function mix(from: RGBA, to: RGBA, t: number): RGBA {
   const lerp = (a: number, b: number) => a + (b - a) * t;
   return RGBA.fromValues(lerp(from.r, to.r), lerp(from.g, to.g), lerp(from.b, to.b));
+}
+
+function tildify(path: string): string {
+  const home = homedir();
+  return path === home || path.startsWith(home + sep) ? `~${path.slice(home.length)}` : path;
 }

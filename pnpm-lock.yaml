@@ -29,6 +29,9 @@ importers:
 
   packages/cli:
     dependencies:
+      '@evorca/openrca':
+        specifier: workspace:*
+        version: link:../openrca
       '@opentui/core':
         specifier: 0.9.2
         version: 0.9.2(typescript@6.0.3)(web-tree-sitter@0.25.10)
@@ -69,9 +72,6 @@ importers:
       '@types/yazl':
         specifier: ^3.3.1
         version: 3.3.1
-      tsx:
-        specifier: ^4.23.15
-        version: 4.23.15
       yazl:
         specifier: ^3.3.1
         version: 3.3.1

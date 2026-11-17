@@ -14,7 +14,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseCsv } from "../csv.js";
 import { formatPrediction, parsePrediction, writePredictions } from "../prediction.js";
-import { readTasks, type OpenRcaSystem } from "../tasks.js";
+import { openRcaScenarios, type OpenRcaScenario } from "../scenarios.js";
+import { readTasks } from "../tasks.js";
 import { removeOnDispose } from "../temp.js";
 import {
   ensureOpenRca,
@@ -43,27 +44,27 @@ export type Stage = {
 };
 
 /**
- * Scores the archived predictions of `system` in both stages against the tasks
- * in `<dataDir>/<system>/query.csv`, and returns the number of tasks with each
- * stage's result.
+ * Scores the archived predictions of `scenario` in both stages against the
+ * tasks in `<dataDir>/<scenario>/query.csv`, and returns the number of tasks
+ * with each stage's result.
  *
  * @throws Error if the checkout, `query.csv`, the archive file, or the evaluator
  *   fails, or if the archive has no row for a task.
  */
 export async function reproduceArchive({
-  system,
+  scenario,
   dataDir,
   cacheDir,
 }: {
-  readonly system: OpenRcaSystem;
+  readonly scenario: OpenRcaScenario;
   readonly dataDir: string;
   readonly cacheDir: string;
 }): Promise<{ readonly tasks: number; readonly published: Stage; readonly roundTripped: Stage }> {
   const checkout = await ensureOpenRca(cacheDir);
-  const name = system.replace("/", "-");
+  const name = openRcaScenarios[scenario].replace("/", "-");
   const archivePath = join(checkout, "rca", "archive", `agent-${name}.csv`);
   const archive = await readArchive(archivePath);
-  const tasks = await readTasks(system, dataDir);
+  const tasks = await readTasks(scenario, dataDir);
   await using work = removeOnDispose(await mkdtemp(join(tmpdir(), "evorca-reproduce-")));
   const roundTripPath = join(work.path, `${name}.csv`);
   const diagnoses = new Map(
@@ -71,7 +72,7 @@ export async function reproduceArchive({
   );
   await writeFile(roundTripPath, writePredictions(tasks, diagnoses));
   const score = (predictionsPath: string) =>
-    scoreWithOfficialEvaluator({ predictionsPath, system, dataDir, cacheDir });
+    scoreWithOfficialEvaluator({ predictionsPath, scenario, dataDir, cacheDir });
   const published = await score(archivePath);
   const roundTripped = await score(roundTripPath);
   return {
