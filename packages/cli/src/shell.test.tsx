@@ -58,7 +58,7 @@ async function enter(line: string) {
 }
 
 function placeholder(frame: string) {
-  return /❯ (.*?) *│/.exec(frame)?.[1] ?? "";
+  return /› (.*?) *\n/.exec(frame)?.[1] ?? "";
 }
 
 function nonGrays() {
@@ -142,9 +142,21 @@ describe("Shell", () => {
 
     expect(leds()).toEqual(wordmark);
     expect(frame).toContain("autonomous incident investigation");
-    expect(frame).toMatch(/╭─+╮ *\n *│ ❯ /);
+    expect(frame).toMatch(/^ +› /m);
     expect(frame).toContain("enter send   /help commands   ctrl+c exit");
     expect(frame).toMatch(new RegExp(`~/incidents +evorca v${packageJson.version}`));
+  });
+
+  it("draws the input as a prompt over a rule, without a box", async () => {
+    await open();
+    const home = await at(1000);
+    await enter("hello");
+    const session = await type("draft");
+
+    for (const frame of [home, session]) {
+      expect(frame).toMatch(/^( +)› .*\n\1─{40,} *\n\1enter send/m);
+      expect(frame).not.toMatch(/[╭╮╰╯│]/);
+    }
   });
 
   it("switches the dots of the wordmark on one at a time as it boots", async () => {
@@ -232,7 +244,7 @@ describe("Shell", () => {
     expect(frame).not.toContain("•");
     expect(frame).not.toContain("autonomous incident investigation");
     expect(frame).toMatch(/┃ +hello +\n +┃ *\n *\n +┃ +No agent is connected yet\./);
-    expect(frame).toMatch(/│ ❯ +│/);
+    expect(frame).toMatch(/^ +› +\n/m);
     expect(frame).toContain("enter send   /help commands   ctrl+c exit");
     expect(frame).toMatch(new RegExp(`~/incidents +evorca v${packageJson.version}`));
   });

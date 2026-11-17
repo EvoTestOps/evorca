@@ -1,8 +1,8 @@
 /**
  * The interactive shell that `evorca` opens without arguments. It starts on a
- * home screen with the wordmark and the input box in the middle. Once a line
+ * home screen with the wordmark and the input line in the middle. Once a line
  * adds to the transcript, it shows the session view instead, with the
- * transcript above an input box pinned to the bottom. It applies the outcome
+ * transcript above an input line pinned to the bottom. It applies the outcome
  * that `commands.ts` returns for each line, and draws only grays.
  *
  * One clock drives the animations in `motion.ts`. It ticks while one of them
@@ -199,15 +199,9 @@ export function Shell({ directory, onExit }: ShellProps) {
           flexShrink={0}
           marginTop={home ? 2 : 1}
         >
-          <box
-            border
-            borderStyle="rounded"
-            borderColor={palette.border}
-            paddingX={1}
-            flexDirection="row"
-          >
+          <box border={["bottom"]} borderColor={palette.border} flexDirection="row">
             <text fg={palette.muted} flexShrink={0}>
-              {"❯ "}
+              {"› "}
             </text>
             <input
               ref={input}
@@ -297,9 +291,9 @@ const Transcript = memo(function Transcript({ entries }: { readonly entries: rea
 });
 
 function Hints({ width }: { readonly width: number }) {
-  const shown = hints.filter((_, index) => hintsWidth(hints.slice(index)) + 2 <= width);
+  const shown = hints.filter((_, index) => hintsWidth(hints.slice(index)) <= width);
   return (
-    <text paddingLeft={2} flexShrink={0}>
+    <text flexShrink={0}>
       {shown.map(([key, label], index) => (
         <span key={key}>
           <span fg={palette.bright}>{key}</span>
