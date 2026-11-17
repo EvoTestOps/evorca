@@ -6,7 +6,8 @@ import { describe, expect, it } from "vitest";
 const packageDir = fileURLToPath(new URL("..", import.meta.url));
 
 async function evorca(...args: string[]) {
-  return promisify(execFile)(process.execPath, ["--import", "tsx", "src/main.ts", ...args], {
+  const flags = ["--experimental-ffi", "--disable-warning=ExperimentalWarning", "--import", "tsx"];
+  return promisify(execFile)(process.execPath, [...flags, "src/main.ts", ...args], {
     cwd: packageDir,
   }).then(
     ({ stderr }) => ({ code: 0, stderr }),
@@ -15,6 +16,13 @@ async function evorca(...args: string[]) {
 }
 
 describe("evorca", () => {
+  it("exits with code 1 and only its own message when stdin is not a terminal", async () => {
+    const { code, stderr } = await evorca();
+
+    expect(code).toBe(1);
+    expect(stderr).toBe("evorca needs an interactive terminal.\n");
+  });
+
   it("exits with code 1 and lists the commands for an unknown command", async () => {
     const { code, stderr } = await evorca("nope", "--benchmark=openrca");
 

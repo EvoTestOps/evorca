@@ -1,5 +1,8 @@
 /**
  * The `evorca` command, which `pnpm evorca` runs from the repository root.
+ * Without arguments, `evorca` opens the interactive shell full screen, and
+ * exits with code 1 when stdin or stdout is not a terminal. It loads the shell
+ * on demand, so the other commands never load OpenTUI's native library.
  * `evorca fetch` downloads the data of a benchmark's scenarios into
  * `data/benchmarks/<benchmark>/<scenario>/` at the repository root.
  * `evorca reproduce` checks that evorca reproduces the scores that the
@@ -41,33 +44,42 @@ const commands = {
   },
 };
 
-const usage = `Usage: evorca <${Object.keys(commands).join("|")}> --benchmark=<benchmark> [--scenario=<scenario>...]`;
+const usage = [
+  "Usage: evorca",
+  `       evorca <${Object.keys(commands).join("|")}> --benchmark=<benchmark> [--scenario=<scenario>...]`,
+].join("\n");
 
 const { positionals, values } = parseCommandLine();
-const [command] = positionals;
-if (positionals.length !== 1 || !isKeyOf(commands, command)) fail(usage);
+if (positionals.length === 0 && Object.keys(values).length === 0) {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) fail("evorca needs an interactive terminal.");
+  const { openShell } = await import("./shell.js");
+  await openShell();
+} else {
+  const [command] = positionals;
+  if (positionals.length !== 1 || !isKeyOf(commands, command)) fail(usage);
 
-const name = values.benchmark;
-if (!isKeyOf(benchmarks, name)) {
-  const problem = name === undefined ? "Missing --benchmark" : `Unknown benchmark: ${name}`;
-  fail(`${problem}. Choose from: ${Object.keys(benchmarks).join(", ")}`);
+  const name = values.benchmark;
+  if (!isKeyOf(benchmarks, name)) {
+    const problem = name === undefined ? "Missing --benchmark" : `Unknown benchmark: ${name}`;
+    fail(`${problem}. Choose from: ${Object.keys(benchmarks).join(", ")}`);
+  }
+  const benchmark = benchmarks[name];
+
+  const known = Object.keys(benchmark.scenarios);
+  const scenarios = values.scenario ?? known;
+  if (!scenarios.every((scenario) => isKeyOf(benchmark.scenarios, scenario))) {
+    const unknown = scenarios.filter((scenario) => !isKeyOf(benchmark.scenarios, scenario));
+    fail(`Unknown scenario: ${unknown.join(", ")}. Choose from: ${known.join(", ")}`);
+  }
+
+  const root = new URL("../../../", import.meta.url);
+  await commands[command]({
+    benchmark,
+    scenarios,
+    dataDir: fileURLToPath(new URL(`data/benchmarks/${name}/`, root)),
+    cacheDir: fileURLToPath(new URL(".cache/", root)),
+  });
 }
-const benchmark = benchmarks[name];
-
-const known = Object.keys(benchmark.scenarios);
-const scenarios = values.scenario ?? known;
-if (!scenarios.every((scenario) => isKeyOf(benchmark.scenarios, scenario))) {
-  const unknown = scenarios.filter((scenario) => !isKeyOf(benchmark.scenarios, scenario));
-  fail(`Unknown scenario: ${unknown.join(", ")}. Choose from: ${known.join(", ")}`);
-}
-
-const root = new URL("../../../", import.meta.url);
-await commands[command]({
-  benchmark,
-  scenarios,
-  dataDir: fileURLToPath(new URL(`data/benchmarks/${name}/`, root)),
-  cacheDir: fileURLToPath(new URL(".cache/", root)),
-});
 
 function parseCommandLine() {
   try {
