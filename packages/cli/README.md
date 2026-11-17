@@ -4,7 +4,7 @@ The `evorca` command. From the repository root, `pnpm evorca` runs it without a 
 
 ## Scope
 
-- An interactive shell in the terminal, built with [OpenTUI](https://github.com/anomalyco/opentui), which `evorca` opens when it runs without arguments. It opens on a home screen with the evorca wordmark and an input box, then shows a transcript of the session above the input box. A footer shows the working directory and the version.
+- An interactive shell in the terminal, built with [OpenTUI](https://github.com/anomalyco/opentui), which `evorca` opens when it runs without arguments. It opens on a home screen with the evorca wordmark and an input line, then shows a transcript of the session above the input line. A footer shows the working directory and the version.
 - The slash commands `/help` and `/exit`.
 - `evorca fetch`, which downloads the answer keys and the telemetry of a benchmark's scenarios into `data/benchmarks/<benchmark>/<scenario>/` at the repository root.
 - `evorca reproduce`, which downloads only the answer keys and checks that evorca reproduces the scores that a benchmark publishes. It keeps the scorer's checkout and environment in `.cache/` at the repository root.
@@ -51,12 +51,12 @@ You need Node 26.4 or later, because OpenTUI calls its native library through `n
 pnpm evorca
 ```
 
-The shell opens on the home screen. The wordmark fades in from the left. While the input box is empty, its placeholder types out example questions. Type a message and press Enter. After the first message, the transcript replaces the home screen. Each line you send appears in the transcript, followed by the reply. These commands are available:
+The shell opens on the home screen. The wordmark is a panel of dots, like an LED display. Its dots switch on one at a time, and every few seconds a few of them dim for a moment. While the input line is empty, its placeholder types out example questions. Type a message and press Enter. After the first message, the transcript replaces the home screen. The transcript is a log. Each line you send appears in it, followed by the reply, and each entry starts with the local time and `you` or `evorca`. These commands are available:
 
 - `/help` lists the commands.
 - `/exit` closes evorca. ctrl+c does the same.
 
-The shell paints the whole screen in grays on a near-black background, so it looks the same in light and dark terminals. When the terminal is narrower than the wordmark, the plain name replaces it. In the transcript view, nothing moves while the input box holds text, and the shell does no work until you type or resize the terminal. The shell needs an interactive terminal. When stdin or stdout is not one, as in `echo hi | pnpm evorca`, it prints `evorca needs an interactive terminal.` and exits with code 1.
+The shell paints the whole screen in grays on a near-black background, so it looks the same in light and dark terminals. When the terminal is narrower than 73 columns, the plain name replaces the wordmark. In the transcript view, nothing moves while the input line holds text, and the shell does no work until you type or resize the terminal. The shell needs an interactive terminal. When stdin or stdout is not one, as in `echo hi | pnpm evorca`, it prints `evorca needs an interactive terminal.` and exits with code 1.
 
 ## Fetch a scenario
 

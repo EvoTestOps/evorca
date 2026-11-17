@@ -7,25 +7,32 @@ import packageJson from "../package.json" with { type: "json" };
 import { palette, Shell } from "./shell.js";
 
 const wordmark = [
-  "█▀▀▀█ █   █ █▀▀▀█ █▀▀▀ █▀▀▀▀ ▀▀▀▀█",
-  "█▄▄▄█ ▀▄ ▄▀ █   █ █    █     █▀▀▀█",
-  "█▄▄▄▄  ▀▄▀  █▄▄▄█ █    █▄▄▄▄ █▄▄▄█",
+  "#####.#...#..###..####...###...###.",
+  "#.....#...#.#...#.#...#.#...#.#...#",
+  "#.....#...#.#...#.#...#.#.....#...#",
+  "####..#...#.#...#.####..#.....#####",
+  "#.....#...#.#...#.#.#...#.....#...#",
+  "#......#.#..#...#.#..#..#...#.#...#",
+  "#####...#....###..#...#..###..#...#",
 ];
+const dark = wordmark.map((row) => row.replaceAll("#", "."));
+const lit = wordmark.join("").split("#").length - 1;
 const firstExample = "Why did checkout p99 latency spike at 14:05?";
 const secondExample = "Find the root cause of the 5xx burst on payments";
 
 let setup: TestRendererSetup;
 let clock: ManualClock;
 let onExit: () => void;
+let wallTime: Date;
 
 async function open(width = 100, height = 30, directory = "~/incidents") {
   clock = new ManualClock();
   onExit = vi.fn();
-  setup = await testRender(<Shell directory={directory} onExit={onExit} />, {
-    width,
-    height,
-    clock,
-  });
+  wallTime = new Date(2026, 10, 17, 14, 5, 12);
+  setup = await testRender(
+    <Shell directory={directory} wallTime={() => wallTime} onExit={onExit} />,
+    { width, height, clock },
+  );
   await setup.renderOnce();
   return setup.captureCharFrame();
 }
@@ -52,7 +59,7 @@ async function enter(line: string) {
 }
 
 function placeholder(frame: string) {
-  return /❯ (.*?) *│/.exec(frame)?.[1] ?? "";
+  return /› (.*?) *\n/.exec(frame)?.[1] ?? "";
 }
 
 function nonGrays() {
@@ -63,6 +70,43 @@ function nonGrays() {
       [span.fg, span.bg].map((color) => ({ text: span.text, rgb: color.toInts() })),
     )
     .filter(({ rgb: [r, g, b] }) => r !== g || g !== b);
+}
+
+const states = new Map<string, string>([
+  [palette.bright, "#"],
+  [palette.muted, "-"],
+  [palette.border, "."],
+]);
+
+function leds() {
+  return setup
+    .captureSpans()
+    .lines.map((line) =>
+      line.spans
+        .flatMap((span) =>
+          [...span.text].filter((char) => char === "•").map(() => states.get(hex(span.fg)) ?? "?"),
+        )
+        .join(""),
+    )
+    .filter((row) => row.length > 0);
+}
+
+function hex(color: RGBA) {
+  return `#${color
+    .toInts()
+    .slice(0, 3)
+    .map((value) => value.toString(16).padStart(2, "0"))
+    .join("")}`;
+}
+
+function count(rows: readonly string[], state: string) {
+  return rows.join("").split(state).length - 1;
+}
+
+function strays(rows: readonly string[]) {
+  return rows.flatMap((row, y) =>
+    [...row].filter((state, x) => state !== "." && wordmark[y]?.[x] !== "#"),
+  ).length;
 }
 
 describe("palette", () => {
@@ -79,10 +123,14 @@ describe("Shell", () => {
 
   it("draws only grays, at every stage of the animations and in the session", async () => {
     await open();
-    for (const ms of [100, 400, 1000, 2600, 3000]) {
+    let dimmed = 0;
+    for (let ms = 0; ms <= 12_000; ms += 50) {
       await at(ms);
+      dimmed += count(leds(), "-");
       expect(nonGrays(), `${ms} ms`).toEqual([]);
     }
+    expect(dimmed).toBeGreaterThan(0);
+
     await enter("hello");
     await type("draft");
 
@@ -93,32 +141,79 @@ describe("Shell", () => {
     await open();
     const frame = await at(1000);
 
-    for (const row of wordmark) expect(frame).toContain(row);
+    expect(leds()).toEqual(wordmark);
     expect(frame).toContain("autonomous incident investigation");
-    expect(frame).toMatch(/╭─+╮ *\n *│ ❯ /);
+    expect(frame).toMatch(/^ +› /m);
     expect(frame).toContain("enter send   /help commands   ctrl+c exit");
     expect(frame).toMatch(new RegExp(`~/incidents +evorca v${packageJson.version}`));
   });
 
-  it("sweeps the wordmark in from the left", async () => {
+  it("draws the input as a prompt over a rule, without a box", async () => {
     await open();
-    const early = (await at(100))
-      .split("\n")
-      .find((line) => line.includes("█▀▀▀█"))
-      ?.trim();
-    const late = await at(1000);
+    const home = await at(1000);
+    await enter("hello");
+    const session = await type("draft");
 
-    expect(early).toBeDefined();
-    expect(wordmark[0]?.startsWith(early ?? "")).toBe(true);
-    expect(early).not.toBe(wordmark[0]);
-    expect(late).toContain(wordmark[0]);
+    for (const frame of [home, session]) {
+      expect(frame).toMatch(/^( +)› .*\n\1─{40,} *\n\1enter send/m);
+      expect(frame).not.toMatch(/[╭╮╰╯│]/);
+    }
+  });
+
+  it("switches the dots of the wordmark on one at a time as it boots", async () => {
+    await open();
+    expect(leds()).toEqual(dark);
+
+    await at(100);
+    const early = leds();
+    await at(400);
+    const later = leds();
+    await at(1000);
+
+    expect(count(early, "#")).toBeGreaterThan(0);
+    expect(count(early, "#")).toBeLessThan(count(later, "#"));
+    expect(count(later, "#")).toBeLessThan(lit);
+    expect(strays(early) + strays(later)).toBe(0);
+    expect(leds()).toEqual(wordmark);
+  });
+
+  it("dims a few dots of the wordmark for a moment every few seconds", async () => {
+    await open();
+    const step = 25;
+    const flickers: { start: number; end: number }[] = [];
+    for (let ms = 1000; ms <= 20_000; ms += step) {
+      await at(ms);
+      const rows = leds();
+      const dimmed = count(rows, "-");
+      expect(
+        rows.map((row) => row.replaceAll("-", "#")),
+        `${ms} ms`,
+      ).toEqual(wordmark);
+      expect(dimmed, `${ms} ms`).toBeLessThanOrEqual(4);
+      if (dimmed === 0) continue;
+      const last = flickers.at(-1);
+      if (last && last.end === ms - step) last.end = ms;
+      else flickers.push({ start: ms, end: ms });
+    }
+
+    expect(flickers[0]?.start).toBeGreaterThan(2000);
+    expect(flickers.length).toBeGreaterThanOrEqual(2);
+    expect(flickers.length).toBeLessThanOrEqual(6);
+    for (const { start, end } of flickers) expect(end - start).toBeLessThan(300);
+    for (const [index, { start }] of flickers.slice(1).entries()) {
+      expect(start - (flickers[index]?.start ?? 0)).toBeGreaterThan(2000);
+    }
   });
 
   it("shows the plain name instead of the wordmark when the terminal is too narrow", async () => {
-    await open(30, 30);
+    await open(73, 30);
+    expect(leds()).toEqual(dark);
+    await act(() => setup.dispose());
+
+    await open(72, 30);
     const frame = await at(1000);
 
-    expect(frame).not.toContain("█");
+    expect(frame).not.toContain("•");
     expect(frame).toMatch(/^ +evorca +$/m);
   });
 
@@ -147,12 +242,25 @@ describe("Shell", () => {
     await at(1000);
     const frame = await enter("hello");
 
-    expect(frame).not.toContain(wordmark[0]);
+    expect(frame).not.toContain("•");
     expect(frame).not.toContain("autonomous incident investigation");
-    expect(frame).toMatch(/┃ +hello +\n +┃ *\n *\n +┃ +No agent is connected yet\./);
-    expect(frame).toMatch(/│ ❯ +│/);
+    expect(frame).toMatch(
+      /^ +14:05:12 +you +hello +\n +14:05:12 +evorca +No agent is connected yet\. +$/m,
+    );
+    expect(frame).toMatch(/^ +› +\n/m);
     expect(frame).toContain("enter send   /help commands   ctrl+c exit");
     expect(frame).toMatch(new RegExp(`~/incidents +evorca v${packageJson.version}`));
+  });
+
+  it("stamps each entry with the local time when it was added", async () => {
+    await open();
+    await enter("hello");
+    wallTime = new Date(2026, 10, 17, 9, 3, 7);
+    const frame = await enter("/help");
+
+    expect(frame).toMatch(/^ +14:05:12 +you +hello +$/m);
+    expect(frame).toMatch(/^ +09:03:07 +you +\/help +$/m);
+    expect(frame).toMatch(/^ +09:03:07 +evorca +\/help {2}List the commands +$/m);
   });
 
   it("stays home on a blank line", async () => {
@@ -160,17 +268,19 @@ describe("Shell", () => {
     await at(1000);
     const frame = await enter("   ");
 
-    expect(frame).toContain(wordmark[0]);
-    expect(frame).not.toContain("┃");
+    expect(leds()).toEqual(wordmark);
+    expect(frame).not.toMatch(/ you /);
   });
 
-  it("lists the commands for /help", async () => {
+  it("lists the commands for /help, the second line under the first", async () => {
     await open();
-    const frame = await enter("/help");
+    const lines = (await enter("/help")).split("\n");
+    const first = lines.findIndex((line) => line.includes("/help  List the commands"));
 
-    expect(frame).toMatch(/┃ +\/help +\n/);
-    expect(frame).toContain("/help  List the commands");
-    expect(frame).toContain("/exit  Exit evorca");
+    expect(first).toBeGreaterThan(-1);
+    expect(lines[first + 1]?.indexOf("/exit  Exit evorca")).toBe(
+      lines[first]?.indexOf("/help  List the commands"),
+    );
   });
 
   it("names an unknown command", async () => {
@@ -182,11 +292,12 @@ describe("Shell", () => {
 
   it("keeps the newest entry in view", async () => {
     await open();
-    for (const word of ["one", "two", "three", "four", "five", "six"]) await enter(word);
+    const words = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
+    for (const word of words) await enter(word);
     const frame = setup.captureCharFrame();
 
-    expect(frame).not.toMatch(/┃ +one /);
-    expect(frame).toMatch(/┃ +six /);
+    expect(frame).not.toMatch(/ you +one /);
+    expect(frame).toMatch(/ you +ten /);
   });
 
   it("schedules no work while nothing moves", async () => {

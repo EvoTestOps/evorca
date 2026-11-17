@@ -1,9 +1,10 @@
 /**
  * The interactive shell that `evorca` opens without arguments. It starts on a
- * home screen with the wordmark and the input box in the middle. Once a line
+ * home screen with the wordmark and the input line in the middle. Once a line
  * adds to the transcript, it shows the session view instead, with the
- * transcript above an input box pinned to the bottom. It applies the outcome
- * that `commands.ts` returns for each line, and draws only grays.
+ * transcript as a log with timestamps above an input line pinned to the
+ * bottom. It applies the outcome that `commands.ts` returns for each line, and
+ * draws only grays.
  *
  * One clock drives the animations in `motion.ts`. It ticks while one of them
  * moves, sleeps until the next one moves, and stops when none will.
@@ -17,13 +18,7 @@
 // @jsxImportSource @opentui/react
 import { homedir } from "node:os";
 import { sep } from "node:path";
-import {
-  createCliRenderer,
-  RGBA,
-  TextAttributes,
-  type BorderCharacters,
-  type InputRenderable,
-} from "@opentui/core";
+import { createCliRenderer, TextAttributes, type InputRenderable } from "@opentui/core";
 import {
   createRoot,
   useAnimationTick,
@@ -35,36 +30,27 @@ import { memo, useEffect, useRef, useState } from "react";
 import packageJson from "../package.json" with { type: "json" };
 import { submit, type Entry } from "./commands.js";
 import {
+  bootDuration,
   frameRate,
-  glint,
-  introDuration,
-  reveal,
+  led,
   sleep,
   typewriter,
   wordmarkFrame,
+  type Led,
   type Phase,
 } from "./motion.js";
-import { wordmark, wordmarkWidth, type Tone, type Weight } from "./wordmark.js";
+import { panel } from "./wordmark.js";
 
-/**
- * The grays the shell draws with, each with equal red, green, and blue. The
- * wordmark blends them.
- */
+/** The grays the shell draws with, each with equal red, green, and blue. */
 export const palette = {
   background: "#0a0a0a",
-  panel: "#161616",
   border: "#333333",
   muted: "#707070",
   text: "#c8c8c8",
   bright: "#f4f4f4",
 } as const;
 
-type Voice = {
-  readonly bar: string;
-  readonly fg: string;
-  readonly panel?: string;
-  readonly paddingY: number;
-};
+type Voice = { readonly speaker: string; readonly text: string };
 
 type View =
   { readonly view: "home" } | { readonly view: "session"; readonly transcript: readonly Entry[] };
@@ -83,29 +69,17 @@ const hints = [
   ["ctrl+c", "exit"],
 ] as const;
 const separator = "   ";
-const bar: BorderCharacters = {
-  topLeft: "",
-  topRight: "",
-  bottomLeft: "",
-  bottomRight: "",
-  horizontal: " ",
-  vertical: "┃",
-  topT: "",
-  bottomT: "",
-  leftT: "",
-  rightT: "",
-  cross: "",
-};
+const dot = "•";
+const wordmarkWidth = (panel[0]?.length ?? 0) * 2 - 1;
 const voices: Readonly<Record<Entry["role"], Voice>> = {
-  you: { bar: palette.bright, fg: palette.bright, panel: palette.panel, paddingY: 1 },
-  evorca: { bar: palette.muted, fg: palette.text, paddingY: 0 },
+  you: { speaker: palette.bright, text: palette.bright },
+  evorca: { speaker: palette.muted, text: palette.text },
 };
-
-const background = RGBA.fromHex(palette.background);
-const brightest = RGBA.fromHex(palette.bright);
-const inks: Readonly<Record<Weight, RGBA>> = {
-  light: RGBA.fromHex(palette.muted),
-  heavy: brightest,
+const speakerWidth = Math.max(...Object.keys(voices).map((role) => role.length));
+const inks: Readonly<Record<Led, string>> = {
+  off: palette.border,
+  dim: palette.muted,
+  on: palette.bright,
 };
 
 /**
@@ -119,22 +93,34 @@ export async function openShell(): Promise<void> {
     backgroundColor: palette.background,
   });
   createRoot(renderer).render(
-    <Shell directory={tildify(process.cwd())} onExit={() => renderer.destroy()} />,
+    <Shell
+      directory={tildify(process.cwd())}
+      wallTime={() => new Date()}
+      onExit={() => renderer.destroy()}
+    />,
   );
 }
 
-/** The props of {@link Shell}. `directory` is the working directory as the user should read it. */
-export type ShellProps = { readonly directory: string; readonly onExit: () => void };
+/**
+ * The props of {@link Shell}. `directory` is the working directory as the user
+ * should read it, and `wallTime` returns the local time to stamp each entry
+ * of the transcript with.
+ */
+export type ShellProps = {
+  readonly directory: string;
+  readonly wallTime: () => Date;
+  readonly onExit: () => void;
+};
 
 /** The whole screen. It calls `onExit` on `/exit` and on ctrl+c. */
-export function Shell({ directory, onExit }: ShellProps) {
+export function Shell({ directory, wallTime, onExit }: ShellProps) {
   const renderer = useRenderer();
   const { width } = useTerminalDimensions();
   const [start] = useState(() => renderer.clock.now());
   const [view, setView] = useState<View>({ view: "home" });
   const [draft, setDraft] = useState<Draft>({
     kind: "empty",
-    typingFrom: start + introDuration,
+    typingFrom: start + bootDuration,
     firstExample: 0,
   });
   const [, setFrame] = useState(start);
@@ -178,7 +164,7 @@ export function Shell({ directory, onExit }: ShellProps) {
 
   function onSubmit(line: string) {
     if (input.current) input.current.value = "";
-    const outcome = submit(line);
+    const outcome = submit(line, wallTime());
     if (outcome.kind === "exit") return onExit();
     if (outcome.entries.length === 0) return;
     setView((view) => ({
@@ -203,15 +189,9 @@ export function Shell({ directory, onExit }: ShellProps) {
           flexShrink={0}
           marginTop={home ? 2 : 1}
         >
-          <box
-            border
-            borderStyle="rounded"
-            borderColor={palette.border}
-            paddingX={1}
-            flexDirection="row"
-          >
+          <box border={["bottom"]} borderColor={palette.border} flexDirection="row">
             <text fg={palette.muted} flexShrink={0}>
-              {"❯ "}
+              {"› "}
             </text>
             <input
               ref={input}
@@ -257,22 +237,13 @@ const Masthead = memo(function Masthead({ wordmarkAt }: { readonly wordmarkAt: n
 function Wordmark({ t }: { readonly t: number }) {
   return (
     <box flexDirection="column" flexShrink={0}>
-      {wordmark.map((row, y) => (
+      {panel.map((row, y) => (
         <text key={y}>
-          {row.map((cell, x) => {
-            const shown = reveal(t, x, wordmarkWidth);
-            const lit = glint(t, x, wordmarkWidth);
-            return (
-              <span
-                key={x}
-                fg={paint(cell.fg, cell.weight, shown, lit)}
-                bg={paint(cell.bg, cell.weight, shown, lit)}
-                attributes={cell.weight === "heavy" ? TextAttributes.BOLD : 0}
-              >
-                {shown === 0 ? " " : cell.char}
-              </span>
-            );
-          })}
+          {row.map((spot, x) => (
+            <span key={x} fg={inks[spot.lit ? led(t, spot.id) : "off"]}>
+              {x === 0 ? dot : ` ${dot}`}
+            </span>
+          ))}
         </text>
       ))}
     </box>
@@ -293,15 +264,17 @@ const Transcript = memo(function Transcript({ entries }: { readonly entries: rea
         return (
           <box
             key={index}
-            border={["left"]}
-            customBorderChars={bar}
-            borderColor={voice.bar}
-            backgroundColor={voice.panel}
-            paddingX={2}
-            paddingY={voice.paddingY}
-            marginTop={index > 0 ? 1 : 0}
+            flexDirection="row"
+            gap={2}
+            marginTop={entry.role === "you" && index > 0 ? 1 : 0}
           >
-            <text fg={voice.fg}>{entry.text}</text>
+            <text fg={palette.muted} flexShrink={0}>
+              {entry.at.toTimeString().slice(0, 8)}
+            </text>
+            <text fg={voice.speaker} flexShrink={0}>
+              {entry.role.padEnd(speakerWidth)}
+            </text>
+            <text fg={voice.text}>{entry.text}</text>
           </box>
         );
       })}
@@ -310,9 +283,9 @@ const Transcript = memo(function Transcript({ entries }: { readonly entries: rea
 });
 
 function Hints({ width }: { readonly width: number }) {
-  const shown = hints.filter((_, index) => hintsWidth(hints.slice(index)) + 2 <= width);
+  const shown = hints.filter((_, index) => hintsWidth(hints.slice(index)) <= width);
   return (
-    <text paddingLeft={2} flexShrink={0}>
+    <text flexShrink={0}>
       {shown.map(([key, label], index) => (
         <span key={key}>
           <span fg={palette.bright}>{key}</span>
@@ -333,17 +306,6 @@ function Footer({ directory, width }: { readonly directory: string; readonly wid
       </text>
     </box>
   );
-}
-
-function paint(tone: Tone, weight: Weight, shown: number, lit: number): RGBA {
-  if (tone === "background") return background;
-  const color = tone === "ink" ? inks[weight] : mix(background, inks[weight], 0.25);
-  return mix(background, mix(color, brightest, lit), shown);
-}
-
-function mix(from: RGBA, to: RGBA, t: number): RGBA {
-  const lerp = (a: number, b: number) => a + (b - a) * t;
-  return RGBA.fromValues(lerp(from.r, to.r), lerp(from.g, to.g), lerp(from.b, to.b));
 }
 
 function hintsWidth(shown: readonly (readonly [string, string])[]): number {

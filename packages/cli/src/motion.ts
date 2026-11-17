@@ -1,23 +1,27 @@
 /**
- * The timing of the shell's animations: the wordmark's intro sweep and its
- * shimmer, and the placeholder that types out example questions. Every
- * function is pure in the time it takes. `wordmarkFrame` and `typewriter` also
- * return a phase, which says whether the animation moves now and how long the
- * current stretch lasts. The shell drives all of them from one clock, which
- * ticks while any phase moves and sleeps through the stretches where none
- * does.
+ * The timing of the shell's animations: the boot of the wordmark, where its
+ * dots switch on one at a time, the flicker of a few dots now and then, and
+ * the placeholder that types out example questions. Every function is pure in
+ * the time it takes. `wordmarkFrame` and `typewriter` also return a phase,
+ * which says whether the animation moves now and how long the current stretch
+ * lasts. The shell drives all of them from one clock, which ticks while any
+ * phase moves and sleeps through the stretches where none does.
  *
  * @module
  */
+import { litDots } from "./wordmark.js";
 
 /** A stretch of an animation: whether it changes the screen, and the ms until the stretch ends. */
 export type Phase = { readonly moving: boolean; readonly left: number };
 
+/** The state of a dot of the wordmark that can light. */
+export type Led = "off" | "dim" | "on";
+
 /** How often the clock ticks while something moves, in frames per second. */
 export const frameRate = 30;
 
-/** How long the wordmark takes to sweep in, in ms. */
-export const introDuration = 700;
+/** How long the wordmark takes to switch on all of its dots, in ms. */
+export const bootDuration = 900;
 
 /** The questions the empty input types out as its placeholder, in turn. */
 export const examples = [
@@ -26,55 +30,38 @@ export const examples = [
   "What changed before node-6 started OOM-killing pods?",
 ] as const;
 
-const intro = { edge: 8 };
-const shimmer = { first: 2000, every: 8000, duration: 1200, radius: 6, strength: 0.5 };
+const flicker = { first: 4000, every: 6000, duration: 150, dots: 3 };
+const seeds = { boot: 1, flickerStart: 2, flickerDots: 3 };
 const typing = { type: 30, hold: 2000, erase: 12, rest: 400 };
 const period = examples.reduce((sum, text) => sum + cycleLength(text), 0);
+const bootOrder = Array.from({ length: litDots }, (_, id) => id).sort(
+  (a, b) => hash(seeds.boot, a) - hash(seeds.boot, b),
+);
+const switchOn = Array.from(
+  { length: litDots },
+  (_, id) => (bootDuration * (bootOrder.indexOf(id) + 1)) / litDots,
+);
 
 /**
- * How far column `x` of a wordmark `width` columns wide has faded in, from 0
- * to 1, `t` ms after the shell opened. A soft edge sweeps from left to right
- * and slows as it ends.
+ * The state of the dot numbered `id`, `t` ms after the shell opened. During
+ * the boot, the dots switch on one at a time in a scattered order. After the
+ * boot, a few dots dim for a moment every 3 to 9 s.
  */
-export function reveal(t: number, x: number, width: number): number {
-  const front = easeOut(clamp(t / introDuration)) * (width + intro.edge);
-  return clamp((front - x) / intro.edge);
-}
-
-/**
- * How strongly the shimmer lights column `x` of a wordmark `width` columns
- * wide, `t` ms after the shell opened: the share of the way to the brightest
- * gray, from 0 to one half. A soft band crosses the wordmark every 8 s.
- */
-export function glint(t: number, x: number, width: number): number {
-  const since = t - shimmer.first;
-  if (since < 0) return 0;
-  const progress = (since % shimmer.every) / shimmer.duration;
-  if (progress >= 1) return 0;
-  const center = easeInOut(progress) * (width + 2 * shimmer.radius) - shimmer.radius;
-  const distance = Math.abs(x - center) / shimmer.radius;
-  return distance >= 1 ? 0 : (shimmer.strength * (1 + Math.cos(Math.PI * distance))) / 2;
+export function led(t: number, id: number): Led {
+  if (t < (switchOn[id] ?? 0)) return "off";
+  const { slot, start } = flickerAt(t);
+  return t >= start && flickers(slot, id) ? "dim" : "on";
 }
 
 /**
  * The wordmark `t` ms after the shell opened, as the time to draw it at and
- * its phase. The intro plays first, then a shimmer every 8 s. Every frame
+ * its phase. The boot plays first, then a flicker now and then. Every frame
  * between them looks alike, so the time to draw at stays at the end of the
- * intro while the wordmark rests.
+ * boot while the wordmark rests.
  */
 export function wordmarkFrame(t: number): { readonly at: number; readonly phase: Phase } {
   const phase = wordmarkPhase(t);
-  return { at: phase.moving ? t : introDuration, phase };
-}
-
-function wordmarkPhase(t: number): Phase {
-  if (t < introDuration) return { moving: true, left: introDuration - t };
-  const since = t - shimmer.first;
-  if (since < 0) return { moving: false, left: -since };
-  const into = since % shimmer.every;
-  return into < shimmer.duration
-    ? { moving: true, left: shimmer.duration - into }
-    : { moving: false, left: shimmer.every - into };
+  return { at: phase.moving ? t : bootDuration, phase };
 }
 
 /**
@@ -103,6 +90,39 @@ export function sleep(phases: readonly Phase[]): number {
   return phases.some((phase) => phase.moving) ? 0 : Math.min(...phases.map((phase) => phase.left));
 }
 
+function wordmarkPhase(t: number): Phase {
+  if (t < bootDuration) return { moving: true, left: bootDuration - t };
+  const { start } = flickerAt(t);
+  return t < start
+    ? { moving: false, left: start - t }
+    : { moving: true, left: start + flicker.duration - t };
+}
+
+function flickerAt(t: number): { readonly slot: number; readonly start: number } {
+  const slot = Math.max(0, Math.floor((t - flicker.first) / flicker.every));
+  const start = flickerStart(slot);
+  return t < start + flicker.duration
+    ? { slot, start }
+    : { slot: slot + 1, start: flickerStart(slot + 1) };
+}
+
+function flickerStart(slot: number): number {
+  return flicker.first + flicker.every * (slot + hash(seeds.flickerStart, slot) / 2);
+}
+
+function flickers(slot: number, id: number): boolean {
+  const spacing = Math.floor(litDots / flicker.dots);
+  const offset = (id - Math.floor(hash(seeds.flickerDots, slot) * litDots) + litDots) % litDots;
+  return offset % spacing === 0 && offset < spacing * flicker.dots;
+}
+
+function hash(seed: number, n: number): number {
+  let h = Math.imul(seed, 0x9e3779b9) ^ Math.imul(n, 0x85ebca6b);
+  h = Math.imul(h ^ (h >>> 16), 0x7feb352d);
+  h = Math.imul(h ^ (h >>> 15), 0x846ca68b);
+  return ((h ^ (h >>> 16)) >>> 0) / 2 ** 32;
+}
+
 function example(index: number): string {
   return examples[index % examples.length] ?? "";
 }
@@ -125,16 +145,4 @@ function cycle(text: string, into: number): { readonly text: string; readonly ph
     return { text: shown, phase: { moving: true, left: erased - into } };
   }
   return { text: "", phase: { moving: false, left: cycleLength(text) - into } };
-}
-
-function clamp(value: number): number {
-  return Math.min(1, Math.max(0, value));
-}
-
-function easeOut(progress: number): number {
-  return 1 - (1 - progress) ** 3;
-}
-
-function easeInOut(progress: number): number {
-  return progress < 0.5 ? 4 * progress ** 3 : 1 - (-2 * progress + 2) ** 3 / 2;
 }

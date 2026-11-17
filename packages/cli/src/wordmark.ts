@@ -1,96 +1,38 @@
 /**
- * The evorca wordmark: the six letters in a pixel font three terminal rows
- * tall. A cell holds an upper and a lower pixel, so one block character draws
- * either pixel, both, or neither. A pixel is ink (`#`), shadow (`+`), or empty
- * (`.`). Shadow fills the inside of a letter. "evo" is set light and "rca"
- * heavy.
+ * The evorca wordmark as an LED dot matrix: the six letters in a dot font
+ * five dots wide and seven tall, set on one panel with a column of dots
+ * between letters. Every position on the panel holds a dot. The dots of the
+ * letters can light, and the rest stay dark, so the whole panel shows.
  *
  * @module
  */
 
-/** What part of a cell shows: the letter's ink, the shadow inside the letter, or the background. */
-export type Tone = "ink" | "shadow" | "background";
+type Letter = "e" | "v" | "o" | "r" | "c" | "a";
 
-/** The weight of a letter: `light` for "evo", `heavy` for "rca". */
-export type Weight = "light" | "heavy";
-
-/** One terminal cell of the wordmark: a block character and the tones of its two colors. */
-export type Cell = {
-  readonly char: " " | "█" | "▀" | "▄";
-  readonly fg: Tone;
-  readonly bg: Tone;
-  readonly weight: Weight;
+const font: Readonly<Record<Letter, readonly string[]>> = {
+  e: ["#####", "#....", "#....", "####.", "#....", "#....", "#####"],
+  v: ["#...#", "#...#", "#...#", "#...#", "#...#", ".#.#.", "..#.."],
+  o: [".###.", "#...#", "#...#", "#...#", "#...#", "#...#", ".###."],
+  r: ["####.", "#...#", "#...#", "####.", "#.#..", "#..#.", "#...#"],
+  c: [".###.", "#...#", "#....", "#....", "#....", "#...#", ".###."],
+  a: [".###.", "#...#", "#...#", "#####", "#...#", "#...#", "#...#"],
 };
 
-type Glyph = readonly (readonly [upper: string, lower: string])[];
+const word: readonly Letter[] = ["e", "v", "o", "r", "c", "a"];
 
-const glyphs: Readonly<Record<"e" | "v" | "o" | "r" | "c" | "a", Glyph>> = {
-  e: [
-    ["#####", "#+++#"],
-    ["#+++#", "#####"],
-    ["#++++", "#####"],
-  ],
-  v: [
-    ["#+++#", "#+++#"],
-    ["#+++#", ".#+#."],
-    [".#+#.", "..#.."],
-  ],
-  o: [
-    ["#####", "#+++#"],
-    ["#+++#", "#+++#"],
-    ["#+++#", "#####"],
-  ],
-  r: [
-    ["####", "#..."],
-    ["#...", "#..."],
-    ["#...", "#..."],
-  ],
-  c: [
-    ["#####", "#++++"],
-    ["#++++", "#++++"],
-    ["#++++", "#####"],
-  ],
-  a: [
-    ["#####", "....#"],
-    ["#####", "#+++#"],
-    ["#+++#", "#####"],
-  ],
-};
+/**
+ * One position on the panel. A dot of a letter can light and has an `id`,
+ * which counts those dots in reading order from 0. Any other dot stays dark.
+ */
+export type Dot = { readonly lit: true; readonly id: number } | { readonly lit: false };
 
-const letters: readonly (readonly [keyof typeof glyphs, Weight])[] = [
-  ["e", "light"],
-  ["v", "light"],
-  ["o", "light"],
-  ["r", "heavy"],
-  ["c", "heavy"],
-  ["a", "heavy"],
-];
+const pattern = font.e.map((_, y) => word.map((letter) => font[letter][y]).join("."));
+let next = 0;
 
-const strength: Readonly<Record<Tone, number>> = { background: 0, shadow: 1, ink: 2 };
-
-/** The wordmark's three rows of cells, top to bottom, with one empty column between letters. */
-export const wordmark: readonly (readonly Cell[])[] = [0, 1, 2].map((row) =>
-  letters.flatMap(([letter, weight], index) => {
-    const [upper = "", lower = ""] = glyphs[letter][row] ?? [];
-    const cells = [...upper].map((pixel, x) => cell(tone(pixel), tone(lower[x]), weight));
-    return index === 0 ? cells : [cell("background", "background", weight), ...cells];
-  }),
+/** The rows of the panel, top to bottom. */
+export const panel: readonly (readonly Dot[])[] = pattern.map((row) =>
+  [...row].map((pixel): Dot => (pixel === "#" ? { lit: true, id: next++ } : { lit: false })),
 );
 
-/** The width of the wordmark in columns. */
-export const wordmarkWidth = Math.max(...wordmark.map((row) => row.length));
-
-function tone(pixel: string | undefined): Tone {
-  return pixel === "#" ? "ink" : pixel === "+" ? "shadow" : "background";
-}
-
-function cell(upper: Tone, lower: Tone, weight: Weight): Cell {
-  if (upper === lower) {
-    return upper === "ink"
-      ? { char: "█", fg: "ink", bg: "background", weight }
-      : { char: " ", fg: upper, bg: upper, weight };
-  }
-  return strength[upper] > strength[lower]
-    ? { char: "▀", fg: upper, bg: lower, weight }
-    : { char: "▄", fg: lower, bg: upper, weight };
-}
+/** The number of dots that light. */
+export const litDots = next;
