@@ -9,20 +9,22 @@
  *
  * @module
  */
-import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
-import { dataFileSha256, driveArchives, openRcaCommit, openRcaRepository } from "../pinned.js";
-import { openRcaScenarios, type OpenRcaScenario } from "../scenarios.js";
-import { reproduceArchive, type Mismatch, type Stage } from "../scoring/archive.js";
-import { evaluatorPython } from "../scoring/evaluator.js";
-import { summarize, type Summary } from "../scoring/summary.js";
+import { openRcaScenarios, type OpenRcaScenario } from "../index.js";
+import {
+  evaluatorVersions,
+  pinnedInputs,
+  reproduceArchive,
+  summarize,
+  type Mismatch,
+  type Stage,
+  type Summary,
+} from "../scoring/index.js";
 
 const dataDir = fileURLToPath(new URL("../../../../data/benchmarks/openrca/", import.meta.url));
 const cacheDir = fileURLToPath(new URL("../../../../.cache/", import.meta.url));
 
-const uv = (await promisify(execFile)("uv", ["--version"])).stdout.trim();
-const python = await evaluatorPython(cacheDir);
+const { uv, python } = await evaluatorVersions(cacheDir);
 const scenarios = Object.keys(openRcaScenarios) as OpenRcaScenario[];
 const results = await Array.fromAsync(scenarios, async (scenario) => ({
   scenario,
@@ -33,11 +35,11 @@ const mismatches = results.flatMap((result) => [
   ...result.roundTripped.mismatches,
 ]);
 
-console.log(`OpenRCA ${openRcaRepository} at ${openRcaCommit}`);
-for (const [name, archive] of Object.entries(driveArchives)) {
+console.log(`OpenRCA ${pinnedInputs.repository} at ${pinnedInputs.commit}`);
+for (const [name, archive] of Object.entries(pinnedInputs.driveArchives)) {
   console.log(`Drive ${name} archive ${archive.driveId}, ${archive.bytes} bytes`);
 }
-for (const [file, sha256] of Object.entries(dataFileSha256)) {
+for (const [file, sha256] of Object.entries(pinnedInputs.answerKeySha256)) {
   console.log(`sha256 ${sha256}  ${file}`);
 }
 console.log(`node ${process.version}, ${uv}, ${python}`);

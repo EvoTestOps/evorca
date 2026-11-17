@@ -55,14 +55,18 @@ export async function ensureOpenRca(cacheDir: string): Promise<string> {
 }
 
 /**
- * Returns the evaluator's `python --version`, such as `Python 3.11.14`, and
- * creates the Python environment first if it does not exist.
+ * Returns the `--version` output of uv and of the evaluator's Python, such as
+ * `uv 0.9.17 (2b5d65e61 2025-12-09)` and `Python 3.11.14`. It creates the
+ * Python environment first if it does not exist.
  *
  * @throws Error if uv is not installed or cannot create the environment.
  */
-export async function evaluatorPython(cacheDir: string): Promise<string> {
-  const { stdout } = await runPython(cacheDir, ["--version"]);
-  return stdout.trim();
+export async function evaluatorVersions(
+  cacheDir: string,
+): Promise<{ readonly uv: string; readonly python: string }> {
+  const uv = await run("uv", ["--version"]);
+  const python = await runPython(cacheDir, ["--version"]);
+  return { uv: uv.stdout.trim(), python: python.stdout.trim() };
 }
 
 /**
