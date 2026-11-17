@@ -1,19 +1,43 @@
-import type { TestRendererSetup } from "@opentui/core/testing";
+import { RGBA } from "@opentui/core";
+import { ManualClock, type TestRendererSetup } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
 import { act } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import packageJson from "../package.json" with { type: "json" };
-import { banner } from "./banner.js";
-import { Shell } from "./shell.js";
+import { palette, Shell } from "./shell.js";
 
-const placeholder = "Describe an incident to investigate";
+const wordmark = [
+  "█▀▀▀█ █   █ █▀▀▀█ █▀▀▀ █▀▀▀▀ ▀▀▀▀█",
+  "█▄▄▄█ ▀▄ ▄▀ █   █ █    █     █▀▀▀█",
+  "█▄▄▄▄  ▀▄▀  █▄▄▄█ █    █▄▄▄▄ █▄▄▄█",
+];
+const firstExample = "Why did checkout p99 latency spike at 14:05?";
+const secondExample = "Find the root cause of the 5xx burst on payments";
 
 let setup: TestRendererSetup;
+let clock: ManualClock;
 let onExit: () => void;
 
-async function open(width = 100, height = 30) {
+async function open(width = 100, height = 30, directory = "~/incidents") {
+  clock = new ManualClock();
   onExit = vi.fn();
-  setup = await testRender(<Shell directory="~/incidents" onExit={onExit} />, { width, height });
+  setup = await testRender(<Shell directory={directory} onExit={onExit} />, {
+    width,
+    height,
+    clock,
+  });
+  await setup.renderOnce();
+  return setup.captureCharFrame();
+}
+
+async function at(ms: number) {
+  await act(async () => clock.setTime(ms));
+  await setup.renderOnce();
+  return setup.captureCharFrame();
+}
+
+async function type(text: string) {
+  await act(async () => setup.mockInput.typeText(text));
   await setup.renderOnce();
   return setup.captureCharFrame();
 }
@@ -27,60 +51,124 @@ async function enter(line: string) {
   return setup.captureCharFrame();
 }
 
-afterEach(() => act(() => setup.dispose()));
+function placeholder(frame: string) {
+  return /❯ (.*?) *│/.exec(frame)?.[1] ?? "";
+}
+
+function nonGrays() {
+  return setup
+    .captureSpans()
+    .lines.flatMap((line) => line.spans)
+    .flatMap((span) =>
+      [span.fg, span.bg].map((color) => ({ text: span.text, rgb: color.toInts() })),
+    )
+    .filter(({ rgb: [r, g, b] }) => r !== g || g !== b);
+}
+
+describe("palette", () => {
+  it("holds only grays", () => {
+    for (const [name, hex] of Object.entries(palette)) {
+      const [r, g, b] = RGBA.fromHex(hex).toInts();
+      expect([g, b], name).toEqual([r, r]);
+    }
+  });
+});
 
 describe("Shell", () => {
-  it("shows the banner, the version and directory, the hints, and the input", async () => {
-    const frame = await open();
+  afterEach(() => act(() => setup.dispose()));
 
-    for (const row of banner) expect(frame).toContain(row);
-    expect(frame).toContain(`v${packageJson.version} · ~/incidents`);
-    expect(frame).toContain("Type a message, or /help for commands.");
-    expect(frame).toContain(placeholder);
-    expect(frame).toContain("ctrl+c to exit");
+  it("draws only grays, at every stage of the animations and in the session", async () => {
+    await open();
+    for (const ms of [100, 400, 1000, 2600, 3000]) {
+      await at(ms);
+      expect(nonGrays(), `${ms} ms`).toEqual([]);
+    }
+    await enter("hello");
+    await type("draft");
+
+    expect(nonGrays()).toEqual([]);
   });
 
-  it("shows the plain name instead of the banner when the terminal narrows", async () => {
+  it("shows the wordmark, the tagline, the input, the hints, and the footer at home", async () => {
     await open();
-    await act(async () => setup.resize(40, 30));
-    await setup.renderOnce();
-    const frame = setup.captureCharFrame();
+    const frame = await at(1000);
+
+    for (const row of wordmark) expect(frame).toContain(row);
+    expect(frame).toContain("autonomous incident investigation");
+    expect(frame).toMatch(/╭─+╮ *\n *│ ❯ /);
+    expect(frame).toContain("enter send   /help commands   ctrl+c exit");
+    expect(frame).toMatch(new RegExp(`~/incidents +evorca v${packageJson.version}`));
+  });
+
+  it("sweeps the wordmark in from the left", async () => {
+    await open();
+    const early = (await at(100))
+      .split("\n")
+      .find((line) => line.includes("█▀▀▀█"))
+      ?.trim();
+    const late = await at(1000);
+
+    expect(early).toBeDefined();
+    expect(wordmark[0]?.startsWith(early ?? "")).toBe(true);
+    expect(early).not.toBe(wordmark[0]);
+    expect(late).toContain(wordmark[0]);
+  });
+
+  it("shows the plain name instead of the wordmark when the terminal is too narrow", async () => {
+    await open(30, 30);
+    const frame = await at(1000);
 
     expect(frame).not.toContain("█");
     expect(frame).toMatch(/^ +evorca +$/m);
   });
 
-  it("answers a message and clears the input", async () => {
+  it("shortens the directory to its last folders when the footer is narrow", async () => {
+    await open(40, 30, "~/Documents/doctoral-research/evorca");
+    const frame = await at(1000);
+
+    expect(frame).toMatch(new RegExp(`^ +…/evorca +evorca v${packageJson.version} +$`, "m"));
+  });
+
+  it("types out example questions while the input is empty", async () => {
     await open();
+    const midway = placeholder(await at(1200));
+    const typed = placeholder(await at(3000));
+    const next = placeholder(await at(7000));
+
+    expect(midway.length).toBeGreaterThan(0);
+    expect(firstExample.startsWith(midway)).toBe(true);
+    expect(midway).not.toBe(firstExample);
+    expect(typed).toBe(firstExample);
+    expect(next).toBe(secondExample);
+  });
+
+  it("moves to the session view on the first line and answers it", async () => {
+    await open();
+    await at(1000);
     const frame = await enter("hello");
 
-    expect(frame).toMatch(/❯ hello +\n +No agent is connected yet\./);
-    expect(frame).toContain(placeholder);
+    expect(frame).not.toContain(wordmark[0]);
+    expect(frame).not.toContain("autonomous incident investigation");
+    expect(frame).toMatch(/┃ +hello +\n +┃ *\n *\n +┃ +No agent is connected yet\./);
+    expect(frame).toMatch(/│ ❯ +│/);
+    expect(frame).toContain("enter send   /help commands   ctrl+c exit");
+    expect(frame).toMatch(new RegExp(`~/incidents +evorca v${packageJson.version}`));
   });
 
-  it("draws text in the terminal's own foreground color", async () => {
+  it("stays home on a blank line", async () => {
     await open();
-    await enter("hello");
-    await act(async () => setup.mockInput.typeText("draft"));
-    await setup.renderOnce();
-    const spans = setup.captureSpans().lines.flatMap((line) => line.spans);
+    await at(1000);
+    const frame = await enter("   ");
 
-    for (const text of ["Type a message", "hello", "No agent is connected yet.", "draft"]) {
-      expect(spans.find((span) => span.text.includes(text))?.fg.intent, text).toBe("default");
-    }
-  });
-
-  it("ignores a blank line", async () => {
-    const before = await open();
-
-    expect(await enter("   ")).toBe(before);
+    expect(frame).toContain(wordmark[0]);
+    expect(frame).not.toContain("┃");
   });
 
   it("lists the commands for /help", async () => {
     await open();
     const frame = await enter("/help");
 
-    expect(frame).toContain("❯ /help");
+    expect(frame).toMatch(/┃ +\/help +\n/);
     expect(frame).toContain("/help  List the commands");
     expect(frame).toContain("/exit  Exit evorca");
   });
@@ -97,8 +185,20 @@ describe("Shell", () => {
     for (const word of ["one", "two", "three", "four", "five", "six"]) await enter(word);
     const frame = setup.captureCharFrame();
 
-    expect(frame).not.toContain("❯ one");
-    expect(frame).toContain("❯ six");
+    expect(frame).not.toMatch(/┃ +one /);
+    expect(frame).toMatch(/┃ +six /);
+  });
+
+  it("schedules no work while nothing moves", async () => {
+    await open();
+    await at(3000);
+    expect(clock.pendingTimerCount).toBeGreaterThan(0);
+
+    await enter("hello");
+    const typed = await type("draft");
+
+    expect(clock.pendingTimerCount).toBe(0);
+    expect(await at(20_000)).toBe(typed);
   });
 
   it("exits once on /exit", async () => {
