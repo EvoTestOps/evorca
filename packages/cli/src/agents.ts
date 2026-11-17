@@ -40,8 +40,8 @@ export type Resources = {
  * candidate components and reasons to `/task.json`. `needsTelemetry` mounts the
  * scenario's telemetry at `/data`. `needsModel` lets the container call a
  * model through the model proxy. `timeoutSeconds` bounds each task, and
- * `resources` limits its container. `jobs` is how many tasks run at once
- * unless `--jobs` says otherwise.
+ * `resources` limits its container. `jobs` is how many tasks run at once by
+ * default.
  */
 export type Agent = {
   readonly seesCandidates: boolean;
@@ -275,10 +275,7 @@ export type Outcome =
   | "timeout"
   | "budget-exhausted";
 
-/**
- * Removes every container that carries the run's label, running or not. A run
- * calls it when it stops, and a resumed run calls it before its first task.
- */
+/** Removes every container that carries the run's label, running or not. */
 export async function removeRunContainers(runId: string): Promise<void> {
   const filter = `label=${runLabel}=${runId}`;
   const listed = await run("docker", ["ps", "--all", "--quiet", "--filter", filter]);

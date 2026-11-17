@@ -60,6 +60,8 @@ export type ModelProxy = {
   /**
    * Stops accepting the token, waits for the task's requests in flight, and
    * returns the task's usage.
+   *
+   * @throws Error if the proxy could not append to the task's `requests.jsonl`.
    */
   closeTask(token: string): Promise<ModelUsage>;
   /** Returns the usage of the run so far, `spent` included. */
@@ -74,14 +76,26 @@ type Task = {
   usage: ModelUsage;
   open: boolean;
   readonly inFlight: Set<Promise<void>>;
+  turn: Promise<void>;
   logging: Promise<void>;
+  logFailure: { readonly error: unknown } | undefined;
 };
 
-type Denial = { readonly status: number; readonly type: string; readonly message: string };
+type Denial = {
+  readonly status: number;
+  readonly type: string;
+  readonly message: string;
+  readonly retry?: boolean;
+};
+
+type Upstream = { status: number; headers: Record<string, string>; body: Buffer };
+
+class UpstreamTimeout extends Error {}
 
 type Policy = { readonly model: ModelId; readonly effort: Effort };
 
 const maxBodyBytes = 32 * 2 ** 20;
+const maxRequestsInFlight = 4;
 const upstreamTimeoutMs = 15 * 60_000;
 const forwardedResponseHeaders = [
   "content-type",
@@ -92,10 +106,6 @@ const forwardedResponseHeaders = [
 ];
 const clientTools = /^(bash|text_editor|memory)_\d+$/;
 
-/**
- * The rules that a request body must meet, in the order the proxy checks them.
- * Each returns the reason it denies `body`, or undefined.
- */
 const bodyRules: readonly ((
   body: Record<string, unknown>,
   policy: Policy,
@@ -146,7 +156,21 @@ export async function startModelProxy(options: ProxyOptions): Promise<ModelProxy
   const record = (task: Task, entry: RequestEntry) => {
     task.usage = addEntry(task.usage, entry, prices);
     runUsage = addEntry(runUsage, entry, prices);
-    task.logging = task.logging.then(() => appendFile(task.logPath, `${JSON.stringify(entry)}\n`));
+    task.logging = task.logging
+      .then(() => appendFile(task.logPath, `${JSON.stringify(entry)}\n`))
+      .catch((error: unknown) => {
+        task.logFailure ??= { error };
+      });
+  };
+
+  const budgetDenial = (task: Task): Denial | undefined => {
+    const taskSpent = task.usage.costUsd >= task.budgetUsd;
+    if (!taskSpent && runUsage.costUsd < options.budgetUsd) return undefined;
+    return {
+      status: 403,
+      type: budgetExhaustedError,
+      message: `The ${taskSpent ? "task's" : "run's"} budget is spent. Answer with what you have.`,
+    };
   };
 
   const server = createServer((req, res) => {
@@ -162,8 +186,18 @@ export async function startModelProxy(options: ProxyOptions): Promise<ModelProxy
       });
       return;
     }
+    if (task.inFlight.size >= maxRequestsInFlight) {
+      req.resume();
+      deny(res, task, {
+        status: 429,
+        type: "rate_limit_error",
+        message: `The model proxy takes at most ${maxRequestsInFlight} requests of a task at once.`,
+      });
+      return;
+    }
     const handled = handle(req, res, task).catch(() => {
-      reply(res, { status: 500, type: "api_error", message: "The model proxy failed." });
+      if (res.headersSent) res.destroy();
+      else reply(res, { status: 500, type: "api_error", message: "The model proxy failed." });
     });
     task.inFlight.add(handled);
     void handled.finally(() => task.inFlight.delete(handled));
@@ -188,46 +222,68 @@ export async function startModelProxy(options: ProxyOptions): Promise<ModelProxy
         message: "The model proxy forwards only POST /v1/messages.",
       });
     }
-    if (task.usage.costUsd >= task.budgetUsd || runUsage.costUsd >= options.budgetUsd) {
+    const spent = budgetDenial(task);
+    if (spent !== undefined) {
       req.resume();
-      const spent = task.usage.costUsd >= task.budgetUsd ? "task's" : "run's";
-      return deny(res, task, {
-        status: 403,
-        type: budgetExhaustedError,
-        message: `The ${spent} budget is spent. Answer with what you have.`,
-      });
+      return deny(res, task, spent);
     }
-    const body = await readBody(req);
-    if (body === undefined) {
+    const text = await readBody(req);
+    if (text === undefined) {
       return deny(res, task, {
         status: 413,
         type: "request_too_large",
         message: `The request is larger than ${maxBodyBytes} bytes.`,
       });
     }
-    const denial = check(req.headers, body, options);
-    if (denial !== undefined) return deny(res, task, denial);
+    const checked = check(req.headers, text, options);
+    if ("denial" in checked) return deny(res, task, checked.denial);
+    // One request of a task at a time, so the budget check counts every earlier response.
+    const turn = task.turn.then(() => send(res, task, req.headers, checked.body));
+    task.turn = turn.catch(() => {});
+    await turn;
+  };
 
+  const send = async (
+    res: ServerResponse,
+    task: Task,
+    headers: IncomingHttpHeaders,
+    body: Buffer,
+  ) => {
+    const spent = budgetDenial(task);
+    if (spent !== undefined) return deny(res, task, spent);
     const started = performance.now();
     const at = new Date().toISOString();
-    const upstream = await forward(options, req.headers, body).catch(() => undefined);
+    const upstream = await forward(options, headers, body).catch((error: unknown) =>
+      error instanceof UpstreamTimeout ? "timeout" : "unreachable",
+    );
     const seconds = Math.round(performance.now() - started) / 1000;
-    if (upstream === undefined) {
+    if (typeof upstream === "string") {
+      const timedOut = upstream === "timeout";
       record(task, {
         kind: "forwarded",
         at,
-        status: 502,
+        status: timedOut ? 504 : 502,
         seconds,
         requestId: null,
-        error: "upstream_unreachable",
+        error: timedOut ? "upstream_timeout" : "upstream_unreachable",
         tokens: null,
         costUsd: 0,
       });
-      return reply(res, {
-        status: 502,
-        type: "api_error",
-        message: "The model proxy could not reach the Anthropic API.",
-      });
+      return reply(
+        res,
+        timedOut
+          ? {
+              status: 504,
+              type: "timeout_error",
+              message: `The Anthropic API did not answer within ${upstreamTimeoutMs / 60_000} minutes. Ask for fewer max_tokens.`,
+              retry: false,
+            }
+          : {
+              status: 502,
+              type: "api_error",
+              message: "The model proxy could not reach the Anthropic API.",
+            },
+      );
     }
     const parsed = parseJson(upstream.body.toString("utf8"));
     const succeeded = upstream.status === 200;
@@ -267,7 +323,9 @@ export async function startModelProxy(options: ProxyOptions): Promise<ModelProxy
         usage: noUsage,
         open: true,
         inFlight: new Set(),
+        turn: Promise.resolve(),
         logging: Promise.resolve(),
+        logFailure: undefined,
       });
       return token;
     },
@@ -278,6 +336,7 @@ export async function startModelProxy(options: ProxyOptions): Promise<ModelProxy
       await Promise.all(task.inFlight);
       await task.logging;
       tasks.delete(token);
+      if (task.logFailure !== undefined) throw task.logFailure.error;
       return task.usage;
     },
     usage: () => runUsage,
@@ -288,11 +347,18 @@ export async function startModelProxy(options: ProxyOptions): Promise<ModelProxy
   };
 }
 
-function check(headers: IncomingHttpHeaders, text: Buffer, policy: Policy): Denial | undefined {
-  const invalid = (message: string): Denial => ({
-    status: 400,
-    type: "invalid_request_error",
-    message,
+/**
+ * Checks a request against the run's policy. It returns the body to forward,
+ * serialized again from what it checked, so a duplicate key or a byte that the
+ * API would read another way cannot slip past a rule.
+ */
+function check(
+  headers: IncomingHttpHeaders,
+  text: Buffer,
+  policy: Policy,
+): { readonly denial: Denial } | { readonly body: Buffer } {
+  const invalid = (message: string) => ({
+    denial: { status: 400, type: "invalid_request_error", message },
   });
   if (headers["anthropic-beta"] !== undefined) {
     return invalid("The model proxy does not forward beta features. Leave out anthropic-beta.");
@@ -303,14 +369,14 @@ function check(headers: IncomingHttpHeaders, text: Buffer, policy: Policy): Deni
     const reason = rule(body, policy);
     if (reason !== undefined) return invalid(reason);
   }
-  return undefined;
+  return { body: Buffer.from(JSON.stringify(body)) };
 }
 
 async function forward(
   { upstreamUrl, apiKey }: ProxyOptions,
   headers: IncomingHttpHeaders,
   body: Buffer,
-): Promise<{ status: number; headers: Record<string, string>; body: Buffer }> {
+): Promise<Upstream> {
   const url = new URL(`${upstreamUrl.replace(/\/$/, "")}/v1/messages`);
   const version = header(headers, "anthropic-version");
   const send = url.protocol === "https:" ? httpsRequest : httpRequest;
@@ -345,7 +411,7 @@ async function forward(
     );
     upstream.once("error", reject);
     // Longer than the 10 minutes that the SDKs wait for a response without streaming.
-    upstream.setTimeout(upstreamTimeoutMs, () => upstream.destroy(new Error("Timed out.")));
+    upstream.setTimeout(upstreamTimeoutMs, () => upstream.destroy(new UpstreamTimeout()));
     upstream.end(body);
   });
 }
@@ -361,12 +427,12 @@ async function readBody(req: IncomingMessage): Promise<Buffer | undefined> {
   return bytes > maxBodyBytes ? undefined : Buffer.concat(chunks);
 }
 
-function reply(res: ServerResponse, { status, type, message }: Denial) {
+function reply(res: ServerResponse, { status, type, message, retry }: Denial) {
   const body = JSON.stringify({ type: "error", error: { type, message } });
   res.writeHead(status, {
     "content-type": "application/json",
     "content-length": Buffer.byteLength(body),
-    "x-should-retry": String(status >= 500),
+    "x-should-retry": String(retry ?? status >= 500),
   });
   res.end(body);
 }

@@ -173,17 +173,21 @@ The run has spent $1.2345 of the $5 budget on 57 model requests.
 
 The proxy prices each response from its `usage`, with the price table in `src/models.ts`. The table records its source and the date it was checked. Cache writes of five minutes and of one hour have their own prices.
 
-The proxy checks both budgets before it forwards a request. Once the task has spent `--task-budget-usd`, or the run has spent `--budget-usd`, the proxy answers each request of the task with HTTP 403 and the error type `evorca_budget_exhausted`. The agent should then write its best answer. The cost of a response is known only after it arrives, so a task can pass its budget by one request, and the run by one request per running task. Once the run's budget is spent, each task that has not started gets the outcome `budget-exhausted` and the empty prediction.
+The proxy checks both budgets before it forwards a request. Once the task has spent `--task-budget-usd`, or the run has spent `--budget-usd`, the proxy answers each request of the task with HTTP 403 and the error type `evorca_budget_exhausted`. The agent should then write its best answer. The run's budget covers every scenario of the run, even on a resume of only some of them.
+
+The proxy forwards a task's requests one at a time, so each check counts the cost of every earlier response. The cost of a response is known only after it arrives, so a task can pass its budget by one request, and the run by one request per running task.
+
+Once the run's budget is spent, each task that has not started gets the outcome `budget-exhausted`. So does a running task that the run's budget denies a request. Which running tasks the run's budget cuts short depends on timing, so their answers are not scored. A resume with a larger `--budget-usd` runs them again. A task that spends its own `--task-budget-usd` keeps its answer, because that budget is the same for every task.
 
 ### Resume a run
 
-To stop a run, press ctrl+c. The command removes the run's containers and networks and prints the command that resumes the run:
+To stop a run, press ctrl+c. The command starts no more tasks and removes the run's containers. It waits for the model requests in flight, so the run records their cost. Then it removes the run's networks and prints the command that resumes the run. Press ctrl+c again to stop at once.
 
 ```sh
 pnpm evorca evaluate --benchmark=openrca --resume=20261117T121537Z-random
 ```
 
-The resumed run skips each task that has an outcome in `run.json`, except `budget-exhausted`. It runs the other tasks again from the start, so it first deletes their folders. What a deleted task spent on the model stays in `run.json` under `abandoned` and counts toward the budget. The proxy records a request's cost when the response arrives, so a request still in flight when the run stops has no recorded cost. The command removes containers and networks that a killed run left behind.
+The resumed run skips each task that has an outcome in `run.json`, except `budget-exhausted`. It runs the other tasks again from the start, so it first deletes their folders. What a deleted task spent on the model stays in `run.json` under `abandoned` and counts toward the budget. The proxy records a request's cost when the response arrives. So a run that is killed, or stopped with a second ctrl+c, has no recorded cost for its requests in flight. The command removes containers and networks that a killed run left behind.
 
 It refuses to resume if the agent's folder, its entry in the `agents` table, `EVORCA_SEED`, `--rows`, or the model settings differ from the run's. The model settings are `--model`, `--effort`, `--task-budget-usd`, `EVORCA_UPSTREAM_URL`, and the price table. To finish a run that spent its budget, resume it with a larger `--budget-usd`.
 
@@ -263,17 +267,19 @@ Each task ends with one outcome. Only `answered` scores the agent's answer. Ever
 | `invalid-prediction` | The container exits with code 0, and `/out/prediction.json` is not valid.    |
 | `nonzero-exit`       | The container exits with another code.                                       |
 | `timeout`            | `evorca evaluate` kills the container at the agent's timeout.                |
-| `budget-exhausted`   | The run's model budget was spent before the task started. No container ran.  |
+| `budget-exhausted`   | The run's model budget ran out before the task started or while it ran.      |
 
 If Docker cannot start a container, `docker run` exits with code 125, and `evorca evaluate` stops and prints the container's log.
 
 ### Reach the model
 
-An agent with `needsModel` reaches one endpoint, the model proxy at `ANTHROPIC_BASE_URL`. The proxy runs inside `evorca evaluate` and listens on the host's 127.0.0.1. One relay container per run, `evorca-<run ID>-relay`, forwards TCP from its port 8080 to the proxy through `host.docker.internal`. Each task gets its own internal Docker network, which holds only the task's container and the relay, by the name `evorca-proxy`. The network has no gateway address. The task's container resolves no other name and reaches no other address, so it cannot reach the internet, the host, or Docker's virtual machine. Before the first task, the command checks that a container on such a network gets an answer from the proxy.
+An agent with `needsModel` reaches one endpoint, the model proxy at `ANTHROPIC_BASE_URL`. The proxy runs inside `evorca evaluate` and listens on the host's 127.0.0.1. One relay container per run, `evorca-<run ID>-relay`, forwards TCP from its port 8080 to the proxy through `host.docker.internal`. Each task gets its own internal Docker network, which holds only the task's container and the relay, by the name `evorca-proxy`. The network has no gateway address. The task's container resolves no other name and reaches no other address, so it cannot reach the internet, the host, or Docker's virtual machine.
+
+The command checks this. It refuses a task network that Docker gave a gateway address. Before the first task, a container on such a network must get an answer from the proxy, find no default route, fail to resolve `api.anthropic.com`, and fail to reach `1.1.1.1:443`. After each task, the relay must still run. Otherwise the run stops, and a resume runs the task again.
 
 This needs Docker Desktop, where `host.docker.internal` reaches the host's 127.0.0.1. On Linux, the check fails before any task.
 
-The proxy forwards only `POST /v1/messages` without streaming, and only with the token of a running task. It sends the real API key upstream in place of the token. It denies any other request with an error in the API's shape, `{"type":"error","error":{"type":"...","message":"..."}}`:
+The proxy forwards only `POST /v1/messages` without streaming, and only with the token of a running task. It takes the token from `x-api-key` or `Authorization: Bearer`. It sends the real API key upstream in place of the token, with the body that it checked, serialized again. It denies any other request with an error in the API's shape, `{"type":"error","error":{"type":"...","message":"..."}}`:
 
 | Status | Type                      | When                                                                                                                                                    |
 | ------ | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -281,6 +287,7 @@ The proxy forwards only `POST /v1/messages` without streaming, and only with the
 | 404    | `not_found_error`         | The request is not `POST /v1/messages`.                                                                                                                 |
 | 403    | `evorca_budget_exhausted` | The task or the run has spent its budget.                                                                                                               |
 | 413    | `request_too_large`       | The body is larger than 32 MiB.                                                                                                                         |
+| 429    | `rate_limit_error`        | The task already has 4 requests in flight.                                                                                                              |
 | 400    | `invalid_request_error`   | The request asks for streaming, another model, another effort, a beta feature, a server tool, MCP servers, a URL source, or inference outside `global`. |
 
-A request sets its effort in `output_config.effort`. Without it, the request uses the model's default effort, which must then be the run's effort. Server tools, MCP servers, and URL sources would let the API reach the internet for the agent. So the proxy forwards only custom tools and the bash, text editor, and memory tools, which the agent runs itself. The proxy passes the API's own errors through, such as 429 and 529, with their `retry-after` headers, so the SDK retries them. The proxy's own errors carry `x-should-retry: false` for a 4xx and `true` for a 5xx, so the SDK retries only a 5xx.
+A request sets its effort in `output_config.effort`. Without it, the request uses the model's default effort, which must then be the run's effort. Server tools, MCP servers, and URL sources would let the API reach the internet for the agent. So the proxy forwards only custom tools and the bash, text editor, and memory tools, which the agent runs itself. The proxy passes the API's own errors through, such as 429 and 529, with their `retry-after` headers, so the SDK retries them. The proxy's own errors carry `x-should-retry: false` for a 4xx and `true` for a 5xx, so the SDK retries only a 5xx. The exception is a response that takes longer than 15 minutes. The proxy answers it with 504 `timeout_error` and no retry, because a retry would take as long. Ask for fewer `max_tokens`.

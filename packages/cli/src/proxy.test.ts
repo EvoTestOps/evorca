@@ -177,6 +177,27 @@ describe("the model proxy", () => {
     });
   });
 
+  it("takes a task's requests one at a time, so parallel requests cannot pass its budget", async () => {
+    const { token } = open(2);
+    const dollar = { delayMs: 100, usage: { input_tokens: 500_000, output_tokens: 0 } };
+
+    const responses = await Promise.all(Array.from({ length: 6 }, () => post(token, ask(dollar))));
+
+    expect(responses.map((response) => response.status).sort()).toEqual([
+      200, 200, 403, 403, 429, 429,
+    ]);
+    expect(mock.requests).toHaveLength(2);
+    expect(await proxy.closeTask(token)).toMatchObject({ requests: 2, costUsd: 2 });
+  });
+
+  it("forwards the body it checked, not the bytes it got", async () => {
+    const { token } = open();
+    const text = `{"model":"claude-opus-5-5","model":"${model}","max_tokens":10,"stream":true,"stream":false,"messages":[{"role":"user","content":"hi"}]}`;
+
+    expect((await post(token, text)).status).toBe(200);
+    expect(mock.requests[0]?.body).toEqual({ ...ask("hi"), max_tokens: 10, stream: false });
+  });
+
   it("denies every task once the run's budget is spent, counting what the run spent before", async () => {
     await proxy.close();
     await start({ budgetUsd: 1, spent: { ...noUsage, inputTokens: 497_500, costUsd: 0.995 } });

@@ -13,6 +13,7 @@ import { execFile } from "node:child_process";
 import { setTimeout as sleep } from "node:timers/promises";
 import { promisify } from "node:util";
 import { runLabel } from "./agents.js";
+import { isRecord } from "./models.js";
 
 const run = promisify(execFile);
 
@@ -34,10 +35,30 @@ net.createServer((client) => {
 `;
 
 const checkScript = `
-fetch("${proxyUrl}/v1/messages", { method: "POST" })
-  .then((response) => response.json())
-  .then((body) => process.exit(body.error.type === "authentication_error" ? 0 : 1))
-  .catch(() => process.exit(1));
+const dns = require("node:dns/promises");
+const fs = require("node:fs");
+const net = require("node:net");
+const reaches = (host, port) =>
+  new Promise((resolve) => {
+    const socket = net.connect({ host, port, timeout: 2000 });
+    socket.once("connect", () => (socket.destroy(), resolve(true)));
+    socket.once("timeout", () => (socket.destroy(), resolve(false)));
+    socket.once("error", () => resolve(false));
+  });
+(async () => {
+  const problems = [];
+  const answer = await fetch("${proxyUrl}/v1/messages", { method: "POST" })
+    .then((response) => response.json())
+    .catch(() => undefined);
+  if (answer?.error?.type !== "authentication_error") problems.push("no answer from the proxy");
+  const routes = fs.readFileSync("/proc/net/route", "utf8").split("\\n").slice(1);
+  if (routes.some((line) => line.split("\\t")[1] === "00000000")) problems.push("a default route");
+  const resolver = new dns.Resolver({ timeout: 2000, tries: 1 });
+  if (await resolver.resolve4("api.anthropic.com").then(() => true, () => false)) problems.push("DNS");
+  if (await reaches("1.1.1.1", 443)) problems.push("a connection to 1.1.1.1:443");
+  console.log(problems.join(", "));
+  process.exit(problems.length === 0 ? 0 : 1);
+})();
 `;
 
 const lockedDown = [
@@ -100,18 +121,31 @@ export function taskNetworkArgs(runId: string, network: string): string[] {
 
 /** The relay of a run, which joins and leaves the networks of the run's tasks. */
 export type Relay = {
-  /** Creates the task network `network` and connects the relay to it as `evorca-proxy`. */
+  /**
+   * Creates the task network `network` and connects the relay to it as
+   * `evorca-proxy`.
+   *
+   * @throws Error if Docker gave the network a gateway address, through which
+   *   a task could reach Docker's virtual machine.
+   */
   openNetwork(network: string): Promise<void>;
   /** Disconnects the relay from the task network `network` and removes the network. */
   closeNetwork(network: string): Promise<void>;
+  /**
+   * Checks that the relay still runs.
+   *
+   * @throws Error if it has stopped, so the tasks that ran lost the model.
+   */
+  assertRunning(): Promise<void>;
 };
 
 /**
  * Starts the relay of run `runId` to the proxy on the host's port `proxyPort`.
  * Then it checks that a container on a task network gets the proxy's answer
- * through the relay.
+ * through the relay, and that it has no default route, no DNS, and no route to
+ * 1.1.1.1.
  *
- * @throws Error if the relay does not start, or if the container gets no answer.
+ * @throws Error if the relay does not start, or if the check fails.
  */
 export async function startRelay(runId: string, proxyPort: number): Promise<Relay> {
   const name = relayName(runId);
@@ -125,16 +159,32 @@ export async function startRelay(runId: string, proxyPort: number): Promise<Rela
   const relay: Relay = {
     async openNetwork(network) {
       await run("docker", taskNetworkArgs(runId, network));
+      const format = "{{range .IPAM.Config}}{{.Gateway}}{{end}}";
+      const gateway = await run("docker", ["network", "inspect", "--format", format, network]);
+      if (gateway.stdout.trim() !== "") {
+        throw new Error(
+          `Docker gave the network ${network} the gateway address ${gateway.stdout.trim()}, so a task could reach Docker's virtual machine.`,
+        );
+      }
       await run("docker", ["network", "connect", "--alias", "evorca-proxy", network, name]);
     },
     async closeNetwork(network) {
       await run("docker", ["network", "disconnect", "--force", network, name]);
       await run("docker", ["network", "rm", network]);
     },
+    async assertRunning() {
+      const state = await run("docker", ["inspect", "--format", "{{.State.Running}}", name]).then(
+        (result) => result.stdout.trim(),
+        () => "gone",
+      );
+      if (state !== "true") {
+        throw new Error(`The model relay ${name} stopped, so the running tasks lost the model.`);
+      }
+    },
   };
   const network = `evorca-${runId}-check`;
   await relay.openNetwork(network);
-  const check = await run("docker", [
+  const problems = await run("docker", [
     "run",
     "--rm",
     "--network",
@@ -147,14 +197,13 @@ export async function startRelay(runId: string, proxyPort: number): Promise<Rela
     "-e",
     checkScript,
   ]).then(
-    () => true,
-    () => false,
+    () => undefined,
+    (error: unknown) => (isRecord(error) && typeof error.stdout === "string" ? error.stdout : ""),
   );
   await relay.closeNetwork(network);
-  if (!check) {
-    throw new Error(
-      `A container on a task network got no answer from the model proxy through ${name}.`,
-    );
+  if (problems !== undefined) {
+    const found = problems.trim() || "no answer";
+    throw new Error(`A container on a task network found ${found}. It must reach only the proxy.`);
   }
   return relay;
 }

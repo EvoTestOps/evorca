@@ -1,8 +1,7 @@
 /**
  * The record of an `evorca evaluate` run, `run.json`, and what a resumed run
  * needs from it. `evorca evaluate` rewrites `run.json` after every task, so a
- * run that stops can resume from its last finished task with the settings it
- * started with.
+ * run that stops can resume with the settings it started with.
  *
  * @module
  */
@@ -128,7 +127,7 @@ function differences(path: string, recorded: unknown, requested: unknown): strin
 
 /**
  * Returns the tasks of `tasks` that have no outcome in `records`, in the order
- * of `tasks`. A task that the run's budget kept from starting has no outcome.
+ * of `tasks`. A `budget-exhausted` task never started, so it runs again.
  */
 export function tasksToRun<T extends { readonly row: number }>(
   tasks: readonly T[],

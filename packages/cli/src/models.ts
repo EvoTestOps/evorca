@@ -189,7 +189,7 @@ export function addUsage(a: ModelUsage, b: ModelUsage, prices: Prices): ModelUsa
 
 /**
  * Returns the usage of the entries in the text of a `requests.jsonl`. It skips
- * a last line that a crash cut short.
+ * a line that does not parse, such as a last line that a crash cut short.
  */
 export function usageOfLog(text: string, prices: Prices): ModelUsage {
   const entries = text.split("\n").flatMap((line): RequestEntry[] => {

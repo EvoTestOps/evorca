@@ -14,10 +14,11 @@
  * `data/runs/<benchmark>/<scenario>/`.
  *
  * The command takes the real API key from `ANTHROPIC_API_KEY` and then deletes
- * the variable, so no child process inherits the key. `pnpm evorca` loads the
- * variable from `.env` at the repository root if the file exists.
- * `EVORCA_UPSTREAM_URL` replaces the Anthropic API for the model proxy, such as
- * with a mock in a test.
+ * the variable, so no Docker command, container, or evaluator that it starts
+ * inherits the key. `pnpm evorca` loads the variable from `.env` at the
+ * repository root if the file exists. `EVORCA_UPSTREAM_URL` replaces the
+ * Anthropic API for the model proxy, such as with a mock. It must use https,
+ * or http on a loopback address, so the key never crosses a network in clear.
  *
  * @module
  */
@@ -216,8 +217,12 @@ function chooseEffort(text: string) {
 
 function readUpstreamUrl(): string {
   const url = process.env.EVORCA_UPSTREAM_URL ?? "https://api.anthropic.com";
-  if (!URL.canParse(url) || !/^https?:$/.test(new URL(url).protocol)) {
-    fail(`EVORCA_UPSTREAM_URL must be an http or https URL, not ${JSON.stringify(url)}.`);
+  const parsed = URL.parse(url);
+  const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(parsed?.hostname ?? "");
+  const secure = parsed?.protocol === "https:" || (parsed?.protocol === "http:" && loopback);
+  if (!secure) {
+    const allowed = "an https URL, or an http URL on localhost, 127.0.0.1, or [::1]";
+    fail(`EVORCA_UPSTREAM_URL must be ${allowed}, not ${JSON.stringify(url)}.`);
   }
   return url;
 }

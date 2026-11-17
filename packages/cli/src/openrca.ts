@@ -15,6 +15,7 @@ import { promisify } from "node:util";
 import type { Diagnosis } from "@evorca/core";
 import {
   openRcaCandidates,
+  openRcaScenarios,
   parsePrediction,
   readTasks,
   writePredictions,
@@ -189,11 +190,13 @@ const defaultTaskBudgetUsd = 2;
  * answers with the official evaluator and prints a line per task and the
  * accuracy per scenario. Each scenario's run lands in
  * `<runsDir>/<scenario>/<run id>/`, and its `run.json` is rewritten after every
- * task. A resumed run skips the tasks that have an outcome.
+ * task. A resumed run runs only the tasks that have no outcome or the outcome
+ * `budget-exhausted`.
  *
  * If the agent calls a model, it starts the model proxy and the relay first.
  * Once the run's model budget is spent, each task that has not started gets
- * the outcome `budget-exhausted`.
+ * the outcome `budget-exhausted`, and so does each running task that the run's
+ * budget cuts short. The budget counts every scenario of the run.
  *
  * Before any task, it prints the problem and returns false if a model flag is
  * given for an agent that calls no model, if an agent that calls a model has no
@@ -201,19 +204,29 @@ const defaultTaskBudgetUsd = 2;
  * not exist, if a scenario lacks the data that the agent reads, if Docker does
  * not answer, or if the relay cannot reach the proxy. Otherwise it returns true.
  *
- * On SIGINT or SIGTERM, it removes the run's containers and networks and
- * exits, and the run can resume.
+ * On SIGINT or SIGTERM, it starts no more tasks and removes the run's
+ * containers. It waits for the model requests in flight, so the run records
+ * their cost, then removes the run's networks and exits with 130 or 143. The
+ * run can resume.
  *
  * @throws Error if git, an image build, a container start, or the evaluator fails.
  */
 export async function evaluateOpenRca(request: EvaluateRequest & Dirs): Promise<boolean> {
   const { dataDir, cacheDir, runsDir, agentsDir } = request;
-  const resumed =
+  const runRecords =
     request.resume === undefined
       ? undefined
-      : await readRuns(runsDir, request.resume, request.scenarios);
-  if (resumed?.size === 0) {
+      : await readRuns(runsDir, request.resume, allScenarios);
+  if (runRecords?.size === 0) {
     console.error(`No run ${request.resume} in ${relative(process.cwd(), runsDir)}.`);
+    return false;
+  }
+  const resumed =
+    runRecords &&
+    new Map([...runRecords].filter(([scenario]) => request.scenarios.includes(scenario)));
+  if (runRecords !== undefined && resumed?.size === 0) {
+    const covered = [...runRecords.keys()].join(", ");
+    console.error(`Run ${request.resume} covers ${covered}, not ${request.scenarios.join(", ")}.`);
     return false;
   }
   const recorded = resumed?.values().next().value;
@@ -321,15 +334,18 @@ export async function evaluateOpenRca(request: EvaluateRequest & Dirs): Promise<
     const previous = resumed?.get(scenario);
     const selected =
       rows === null ? scenarioTasks : scenarioTasks.filter((task) => rows.includes(task.row));
+    const pending = tasksToRun(selected, previous?.tasks ?? []);
+    const pendingRows = new Set(pending.map((task) => task.row));
     const abandoned: { row: number; usage: ModelUsage }[] = [];
-    for (const task of tasksToRun(selected, previous?.tasks ?? [])) {
-      const taskDir = taskDirOf(runDir, task.row);
-      const log = await readFile(join(taskDir, "requests.jsonl"), "utf8").catch(() => "");
+    for (const task of pending) {
+      const log = await readFile(join(taskDirOf(runDir, task.row), "requests.jsonl"), "utf8").catch(
+        () => "",
+      );
       if (model !== null && log !== "") {
         abandoned.push({ row: task.row, usage: usageOfLog(log, model.prices.usdPerMTok) });
       }
-      await rm(taskDir, { recursive: true, force: true });
     }
+    const kept = (previous?.tasks ?? []).filter((task) => !pendingRows.has(task.row));
     const record: RunRecord =
       previous === undefined
         ? {
@@ -358,31 +374,45 @@ export async function evaluateOpenRca(request: EvaluateRequest & Dirs): Promise<
             jobs,
             resumes: [...previous.resumes, { startedAt, git, versions }],
             endedAt: null,
+            tasks: kept,
             abandoned: [...previous.abandoned, ...abandoned],
             usage:
               model === null
                 ? null
-                : totalUsage(previous.tasks, [...previous.abandoned, ...abandoned], model),
+                : totalUsage(kept, [...previous.abandoned, ...abandoned], model),
           };
     await mkdir(runDir, { recursive: true });
     await writeJson(join(runDir, "run.json"), record);
+    for (const task of pending) {
+      await rm(taskDirOf(runDir, task.row), { recursive: true, force: true });
+    }
     plans.push({ scenario, tasks: scenarioTasks, selected, runDir, record });
   }
 
   const stop = new AbortController();
+  let stopSignal: NodeJS.Signals | undefined;
+  let sweeper: NodeJS.Timeout | undefined;
   let modelSession: ModelSession | undefined;
   const onSignal = (signal: NodeJS.Signals) => {
+    stopSignal = signal;
     stop.abort();
-    console.error(
-      `\nStopped. Resume with: pnpm evorca evaluate --benchmark=openrca --resume=${runId}`,
-    );
-    void removeRun(runId).finally(() => process.exit(signal === "SIGINT" ? 130 : 143));
+    console.error("\nStopping. Press ctrl+c again to stop at once.");
+    // A task that was starting when the signal came may start its container after one sweep.
+    const sweep = () => void removeRunContainers(runId).catch(() => {});
+    sweep();
+    sweeper = setInterval(sweep, 1000);
   };
   process.once("SIGINT", onSignal).once("SIGTERM", onSignal);
   try {
     if (model !== null && budgetUsd !== null && request.apiKey !== undefined) {
-      const spent = plans.reduce(
-        (sum, plan) => addUsage(sum, plan.record.usage ?? noUsage, model.prices.usdPerMTok),
+      const others = [...(runRecords?.values() ?? [])].filter(
+        (other) => !plans.some((plan) => plan.scenario === other.scenario),
+      );
+      const usages = [...plans.map((plan) => plan.record), ...others].map(
+        (record) => record.usage ?? noUsage,
+      );
+      const spent = usages.reduce(
+        (sum, usage) => addUsage(sum, usage, model.prices.usdPerMTok),
         noUsage,
       );
       const proxy = await startModelProxy({
@@ -394,7 +424,8 @@ export async function evaluateOpenRca(request: EvaluateRequest & Dirs): Promise<
         spent,
       });
       const relay = await startRelay(runId, proxy.port).catch((error: unknown) => {
-        console.error(error instanceof Error ? error.message : String(error));
+        if (!stop.signal.aborted)
+          console.error(error instanceof Error ? error.message : String(error));
         return undefined;
       });
       modelSession = relay === undefined ? undefined : { settings: model, budgetUsd, proxy, relay };
@@ -422,13 +453,23 @@ export async function evaluateOpenRca(request: EvaluateRequest & Dirs): Promise<
     return true;
   } finally {
     process.off("SIGINT", onSignal).off("SIGTERM", onSignal);
+    clearInterval(sweeper);
     if (modelSession !== undefined) await modelSession.proxy.close();
-    if (model !== null && !stop.signal.aborted) await removeRun(runId);
+    await removeRun(runId).catch((error: unknown) => {
+      const reason = error instanceof Error ? error.message : String(error);
+      console.error(`Could not remove the containers and networks of run ${runId}: ${reason}`);
+    });
+    if (stopSignal !== undefined) {
+      console.error(
+        `Stopped. Resume with: pnpm evorca evaluate --benchmark=openrca --resume=${runId}`,
+      );
+      process.exit(stopSignal === "SIGINT" ? 130 : 143);
+    }
   }
 }
 
 /**
- * Runs the tasks of one scenario that have no outcome, rewrites `run.json`
+ * Runs the tasks of one scenario that `tasksToRun` picks, rewrites `run.json`
  * after each, then scores the run. It returns the scores of the run's rows, or
  * undefined if the session's signal aborts.
  */
@@ -438,10 +479,7 @@ async function evaluateScenario(
 ): Promise<ScoredRow[] | undefined> {
   const { jobs, dataDir, cacheDir, signal, model } = session;
   const pending = tasksToRun(selected, record.tasks);
-  const pendingRows = new Set(pending.map((task) => task.row));
-  const records = new Map(
-    record.tasks.filter((task) => !pendingRows.has(task.row)).map((task) => [task.row, task]),
-  );
+  const records = new Map(record.tasks.map((task) => [task.row, task]));
   const done = records.size > 0 ? `, ${records.size} done` : "";
   const folder = relative(process.cwd(), runDir);
   const count = `${selected.length} ${selected.length === 1 ? "task" : "tasks"}`;
@@ -507,15 +545,19 @@ async function evaluateScenario(
 
 /**
  * Runs one task in its own container and returns its record. If the agent
- * calls a model, the task gets a token and a network for the time it runs, or
- * the outcome `budget-exhausted` without a container once the run's budget is
- * spent.
+ * calls a model, the task gets a token and a network for the time it runs. Its
+ * outcome is `budget-exhausted` if the run's budget is spent before it starts,
+ * or if the run's budget denies one of its requests, because which running
+ * tasks the run's budget cuts short depends on timing.
+ *
+ * @throws Error if the session's signal aborts before the container starts, or
+ *   if the relay stopped while the task ran.
  */
 async function runTask(
   task: OpenRcaTask,
   { runId, scenario, agent, seed }: RunRecord,
   runDir: string,
-  { dataDir, model }: Session,
+  { dataDir, model, signal }: Session,
 ): Promise<TaskRecord> {
   const { row, taskIndex } = task;
   if (model !== undefined && model.proxy.usage().costUsd >= model.budgetUsd) {
@@ -532,7 +574,9 @@ async function runTask(
   const started = performance.now();
   let exit: Exit;
   let usage: ModelUsage | null = null;
+  let cutByRun = false;
   if (model === undefined) {
+    signal.throwIfAborted();
     exit = await runContainer({ ...container, model: undefined }, logPath);
   } else {
     const { settings, proxy, relay } = model;
@@ -550,18 +594,22 @@ async function runTask(
         effort: settings.effort,
         taskBudgetUsd: settings.taskBudgetUsd,
       };
+      signal.throwIfAborted();
       exit = await runContainer({ ...container, model: access }, logPath);
+      await relay.assertRunning();
     } finally {
       usage = await proxy.closeTask(token);
-      // A network that is still busy stays until the run removes its networks at the end.
+      // The task's outcome is already known. A network that fails to close stays
+      // until the run removes its networks.
       await relay.closeNetwork(name).catch(() => {});
     }
+    cutByRun = usage.budgetExhausted && usage.costUsd < settings.taskBudgetUsd;
   }
   const seconds = Math.round(performance.now() - started) / 1000;
   const prediction = await readFile(join(taskDir, "out", "prediction.json"), "utf8").catch(
     () => undefined,
   );
-  const { outcome } = outcomeOf(exit, prediction);
+  const outcome = cutByRun ? "budget-exhausted" : outcomeOf(exit, prediction).outcome;
   const exitCode = exit.kind === "exited" ? exit.code : null;
   return { row, taskIndex, outcome, exitCode, seconds, usage };
 }
@@ -580,6 +628,10 @@ function totalUsage(
   const usages = [...tasks.map((task) => task.usage ?? noUsage), ...abandoned.map((a) => a.usage)];
   return usages.reduce((sum, usage) => addUsage(sum, usage, prices.usdPerMTok), noUsage);
 }
+
+const allScenarios = Object.keys(openRcaScenarios).filter((scenario): scenario is OpenRcaScenario =>
+  Object.hasOwn(openRcaScenarios, scenario),
+);
 
 function taskDirOf(runDir: string, row: number): string {
   return join(runDir, "tasks", String(row).padStart(3, "0"));
