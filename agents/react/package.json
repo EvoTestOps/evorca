@@ -1,0 +1,17 @@
+{
+  "name": "@evorca/agent-react",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The ReAct agent, the evorca baseline without self-improvement.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "extract-background": "tsx scripts/extract-background.ts",
+    "smoke": "tsx scripts/smoke.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "1.4.0"
+  }
+}

@@ -29,6 +29,12 @@ importers:
 
   agents/random: {}
 
+  agents/react:
+    dependencies:
+      '@anthropic-ai/sdk':
+        specifier: 1.4.0
+        version: 1.4.0
+
   packages/cli:
     dependencies:
       '@evorca/core':
@@ -91,6 +97,15 @@ importers:
         version: 3.3.1
 
 packages:
+
+  '@anthropic-ai/sdk@1.4.0':
+    resolution: {integrity: sha512-tyuibnhQL57kLOx5oomY4Ld7jOVOPNC5v3IiyRtR3l+Friv66tI4VbuZYF2NMel/T0WMuQMBFOMKDBUbUh8gPA==}
+    hasBin: true
+    peerDependencies:
+      zod: ^3.25.0 || ^4.0.0
+    peerDependenciesMeta:
+      zod:
+        optional: true
 
   '@anthropic-ai/sdk@1.9.0':
     resolution: {integrity: sha512-xDu4za3B+rK+5ZI8wLLoosiIuwi1ktZk/3L3KKNahwO50O34H+622hly8JdXzaEerLQDhsqwVzp81Nrw80BYHg==}
@@ -974,6 +989,12 @@ packages:
     resolution: {integrity: sha512-BbETDVWG+VcMUle37k5Fqp//7SDOK2/1+T7X8TD96M3D9G8jK5VLUdQVdVjGi8im7FGkazX7kk5hkU8X4L5Bng==}
 
 snapshots:
+
+  '@anthropic-ai/sdk@1.4.0':
+    dependencies:
+      '@opentelemetry/api': 1.10.0
+      json-schema-to-ts: 3.1.1
+      standardwebhooks: 1.1.1
 
   '@anthropic-ai/sdk@1.9.0':
     dependencies:
