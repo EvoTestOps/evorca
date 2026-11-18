@@ -16,7 +16,7 @@ import {
   taskRecord,
   tool,
 } from "./watch-fixtures.js";
-import { Watch } from "./watch-view.js";
+import { Watch, type WatchProps } from "./watch-view.js";
 import type { Selection } from "./watch.js";
 
 let setup: TestRendererSetup;
@@ -36,7 +36,7 @@ const local = (time: string) =>
 const lines = (count: number, prefix: string) =>
   Array.from({ length: count }, (_, index) => `${prefix} ${index + 1}`).join("\n");
 
-async function open(run: RunRecord | null = record, height = 40) {
+async function open(run: RunRecord | null = record, height = 40, props: Partial<WatchProps> = {}) {
   folder = await runsFolder();
   const dataDir = join(folder.runsDir, "benchmarks");
   await mkdir(join(dataDir, "telecom"), { recursive: true });
@@ -61,7 +61,7 @@ async function open(run: RunRecord | null = record, height = 40) {
   clock = new ManualClock();
   onExit = vi.fn();
   const wallTime = () => new Date(Date.parse("2026-11-18T10:10:00.000Z") + clock.now());
-  setup = await testRender(<Watch read={read} wallTime={wallTime} onExit={onExit} />, {
+  setup = await testRender(<Watch read={read} wallTime={wallTime} onExit={onExit} {...props} />, {
     width: 120,
     height,
     clock,
@@ -261,6 +261,25 @@ describe("Watch", () => {
     };
 
     expect(await open({ ...record, resumes: [resume] })).toMatch(/10m 00s +since resume/);
+  });
+
+  it("shows the last lines that the runner printed, and ctrl+c to stop it without onExit", async () => {
+    const log = [
+      "Agent random.",
+      "Seed 7.",
+      "",
+      "Run 1 of 2.",
+      "task 000 answered",
+      "task 001 answered",
+    ];
+    const frame = await open(record, 40, { log: () => log, onExit: undefined });
+
+    expect(frame).toMatch(
+      /Seed 7\. *\n +Run 1 of 2\. *\n +task 000 answered *\n +task 001 answered/,
+    );
+    expect(frame).not.toContain("Agent random.");
+    expect(frame).toContain("ctrl+c stop");
+    expect(frame).not.toContain("q quit");
   });
 
   it("calls onExit on q", async () => {
