@@ -146,6 +146,22 @@ describe("evorca evaluate", () => {
   });
 });
 
+describe("evorca report", () => {
+  it("exits with code 1 and shows the usage without a run ID", async () => {
+    const { code, stderr } = await evorca("report", "--benchmark=openrca");
+
+    expect(code).toBe(1);
+    expect(stderr).toContain("evorca report --benchmark=<benchmark>");
+  });
+
+  it("exits with code 1 for a run ID that is not one", async () => {
+    const { code, stderr } = await evorca("report", "--benchmark=openrca", "../x");
+
+    expect(code).toBe(1);
+    expect(stderr).toContain("evorca report takes a run ID");
+  });
+});
+
 describe("evorca fetch", () => {
   it("exits with code 1 and lists the archives and their sizes for an --archive that is none of them", async () => {
     const downloads = await mkdtemp(join(tmpdir(), "evorca-downloads-"));

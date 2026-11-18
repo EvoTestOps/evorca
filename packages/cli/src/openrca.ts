@@ -56,6 +56,7 @@ import {
 } from "./models.js";
 import { startModelProxy, type ModelProxy } from "./proxy.js";
 import { proxyUrl, removeRunNetworks, startRelay, type Relay } from "./relay.js";
+import { reportRuns } from "./report.js";
 import {
   conflicts,
   isFinished,
@@ -201,6 +202,7 @@ const defaultTaskBudgetUsd = 2;
  * `k - 1`, and it must keep the settings of the other runs of the series.
  * Resuming any run of a series finishes the series: it skips each run that
  * `isFinished` accepts, resumes each other run, and starts each missing run.
+ * Then it prints the summary that `reportRuns` prints.
  *
  * If the agent calls a model, it starts the model proxy and the relay first.
  * Once the run's model budget is spent, each task that has not started gets
@@ -213,7 +215,8 @@ const defaultTaskBudgetUsd = 2;
  * if a run of a series has other settings than the series, if `seed` is not
  * the first seed of the series that it resumes, if a row does not exist, if a
  * scenario lacks the data that the agent reads, if Docker does not answer, or
- * if the relay cannot reach the proxy. Otherwise it returns true.
+ * if the relay cannot reach the proxy. It also returns false if the summary of
+ * a series finds no finished run of a scenario. Otherwise it returns true.
  *
  * On SIGINT or SIGTERM, it starts no more tasks and removes the run's
  * containers. It waits for the model requests in flight, so the run records
@@ -265,6 +268,10 @@ export async function evaluateOpenRca(request: EvaluateRequest & Dirs): Promise<
     }
     sameAs ??= (await readRuns(runsDir, runId, scenarios)).values().next().value;
   }
+  if (!(await reportRuns({ runsDir, scenarios, runIds }))) return false;
+  const flags = scenarios.map((scenario) => `--scenario=${scenario}`).join(" ");
+  const report = `pnpm evorca report --benchmark=openrca ${flags} ${runIds.join(" ")}`;
+  console.log(`\nPrint this summary again with: ${report}`);
   return true;
 }
 

@@ -9,6 +9,7 @@ The `evorca` command. From the repository root, `pnpm evorca` runs it without a 
 - `evorca fetch`, which downloads the answer keys and the telemetry of a benchmark's scenarios into `data/benchmarks/<benchmark>/<scenario>/` at the repository root, or reads them from dataset archives on disk.
 - `evorca reproduce`, which downloads only the answer keys and checks that evorca reproduces the scores that a benchmark publishes. It keeps the scorer's checkout and environment in `.cache/` at the repository root.
 - `evorca evaluate`, which runs an agent from `agents/` on a benchmark's scenarios, one Docker container per task and several tasks at a time, scores the answers, and keeps each run in `data/runs/<benchmark>/<scenario>/` at the repository root. A run that stops can resume from its last finished task. `--runs` repeats a run with the same settings. An agent that calls a model reaches the Anthropic API only through a proxy that holds the API key and the budgets.
+- `evorca report`, which prints the mean, the spread, the cost, and the wall time of finished runs from their folders.
 - One benchmark, `openrca`, through [`@evorca/openrca`](../openrca/README.md).
 
 ## Non-goals
@@ -31,6 +32,7 @@ evorca evaluate --benchmark=<benchmark> --agent=<agent> [--scenario=<scenario>..
                 [--effort=<effort>] [--budget-usd=<dollars>] [--task-budget-usd=<dollars>]
 evorca evaluate --benchmark=<benchmark> --resume=<run ID> [--scenario=<scenario>...]
                 [--jobs=<count>] [--budget-usd=<dollars>]
+evorca report --benchmark=<benchmark> [--scenario=<scenario>...] <run ID>...
 ```
 
 - Without arguments, `evorca` opens the [interactive shell](#use-the-shell).
@@ -45,6 +47,7 @@ evorca evaluate --benchmark=<benchmark> --resume=<run ID> [--scenario=<scenario>
 - `--budget-usd` caps what the run spends on the model, in US dollars, and defaults to 50. `--task-budget-usd` caps what each task spends and defaults to 2.
 - The four model flags apply only to an agent that calls a model.
 - `--resume` continues the run with that ID. The run keeps its agent, seed, rows, and model settings. `--jobs` and `--budget-usd` can change. With `--scenario`, the command resumes only those scenarios of the run. Resuming one run of a `--runs` series finishes the whole series.
+- `evorca report` takes one or more run IDs. With `--scenario`, it reports only those scenarios.
 - `EVORCA_SEED`, a non-negative integer in the environment, sets the seed of `evorca evaluate`. Without it, the command picks a seed and prints it, or uses the seed of the run it resumes.
 - `ANTHROPIC_API_KEY` in the environment is the API key for an agent that calls a model. `pnpm evorca` reads it from `.env` at the repository root if the file exists. The command removes it from its environment before it starts any process.
 - `EVORCA_UPSTREAM_URL` replaces `https://api.anthropic.com` as the API that the model proxy calls, such as with a mock in a test.
@@ -62,6 +65,8 @@ fetched  data/benchmarks/openrca/telecom/telemetry/2020_04_11/trace/trace_span.c
 Both commands exit with code 1 and list the valid choices if the command, the benchmark, or a scenario is unknown. They also exit with code 1, and print the reason, if an `--archive` matches no archive of the benchmark, if a file on disk does not match its pinned hash, if the missing files need more than the free disk space, or if a download fails. The free-space message gives both sizes in GB. When Google Drive refuses a download because the file's quota is used up, the message names the archive, its link for a browser, and the command to run with `--archive` once you have downloaded it.
 
 `evorca evaluate` prints one line per task, then the outcomes and the accuracy of each scenario. It exits with code 1 and lists the agents if `--agent` is missing or unknown. Before it runs any task, it exits with code 1 if a model flag is given for an agent that calls no model, if an agent that calls a model has no API key, if a scenario's data is missing, with the `evorca fetch` command that downloads it, if a row in `--rows` does not exist, if Docker does not answer, if a container cannot reach the model proxy, or if the run to resume is missing or has other settings. It names each setting that differs. It exits with code 1 for `--runs` together with `--resume`, because a resumed series keeps its number of runs.
+
+`evorca report` exits with code 1 if a run is missing, if two runs have other settings, or if no run of a scenario is finished. It names each setting that differs.
 
 ## Use the shell
 
@@ -220,6 +225,41 @@ pnpm evorca evaluate --benchmark=openrca --resume=20261118T062557Z-react-1
 ```
 
 The resume skips each finished run. It resumes the unfinished run from its last finished task, as for a single run, and then starts each run that has not started. It works the same after ctrl+c, a crash, or a killed process. If you set `EVORCA_SEED` for the resume, set it to the first seed of the series, as when the series started.
+
+After the last run, the command prints a summary of the series and the command that prints it again. For `random` with `EVORCA_SEED=7` and `--runs=3`:
+
+```text
+telecom: 3 runs of random
+
+| Accuracy (%)   | Tasks |  Mean |   SD |   Min |   Max |
+| -------------- | ----: | ----: | ---: | ----: | ----: |
+| easy strict    |    24 | 16.67 | 4.17 | 12.50 | 20.83 |
+| easy partial   |    24 | 16.67 | 4.17 | 12.50 | 20.83 |
+| middle strict  |    18 |  0.00 | 0.00 |  0.00 |  0.00 |
+| middle partial |    18 |  6.48 | 3.21 |  2.78 |  8.33 |
+| hard strict    |     9 |  0.00 | 0.00 |  0.00 |  0.00 |
+| hard partial   |     9 | 11.00 | 3.67 |  7.33 | 14.67 |
+| total strict   |    51 |  7.84 | 1.96 |  5.88 |  9.80 |
+| total partial  |    51 | 12.07 | 2.85 |  8.80 | 14.04 |
+
+| Run                       | Seed | Strict (%) | Partial (%) | Requests | Cost (USD) | Wall time |
+| ------------------------- | ---: | ---------: | ----------: | -------: | ---------: | --------: |
+| 20261118T062557Z-random-1 |    7 |       5.88 |        8.80 |        - |          - |   0:00:09 |
+| 20261118T062557Z-random-2 |    8 |       7.84 |       13.37 |        - |          - |   0:00:07 |
+| 20261118T062557Z-random-3 |    9 |       9.80 |       14.04 |        - |          - |   0:00:07 |
+| Mean                      |      |            |             |        - |          - |   0:00:08 |
+| Total                     |      |            |             |        - |          - |   0:00:23 |
+```
+
+The first table gives the mean, the sample standard deviation, the minimum, and the maximum of each accuracy over the runs, in percent. The second gives each run's seed, total accuracy, model requests, cost in US dollars, and wall time, then their mean and total. A run of several scenarios runs them one after another, so a scenario's wall time starts at the end of the scenario before it, or at the run's start for the first. The cost of a run includes what its stopped sessions spent, as `run.json` counts it. A wall time marked `*` belongs to a resumed run, so it includes the time between the run's sessions. The tables are Markdown, so they read in a terminal and paste into a document.
+
+To print the summary of finished runs again, name their run IDs:
+
+```sh
+pnpm evorca report --benchmark=openrca --scenario=telecom 20261118T062557Z-react-1 20261118T062557Z-react-2
+```
+
+`evorca report` reads only `run.json` and `scores.json`, and never scores again. It leaves out each run that a resume would continue, and names it. That includes a run with `budget-exhausted` tasks, which a resume with a larger `--budget-usd` finishes. It also names each run that does not cover a scenario. If no run of a scenario is finished, it says so, prints the other scenarios, and exits with code 1. It refuses runs whose agent, rows, or model settings differ, and names each setting that differs. The seed may differ, and the runs may come from several series or from single runs. So to add five runs to the series of seeds 7 to 11, run `--runs=5` with `EVORCA_SEED=12`, then report all ten.
 
 ### Read a run
 
