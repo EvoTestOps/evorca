@@ -2,7 +2,8 @@
  * The `evorca` command, which `pnpm evorca` runs from the repository root.
  * Without arguments, `evorca` opens the interactive shell full screen, and
  * exits with code 1 when stdin or stdout is not a terminal. It loads the shell
- * on demand, so the other commands never load OpenTUI's native library.
+ * on demand, so the other commands never load OpenTUI's native library. The
+ * shell's `/benchmark` runs `openrca` evaluations in the shell's process.
  * `evorca fetch` downloads the data of a benchmark's scenarios, the answer keys
  * and the telemetry, into `data/benchmarks/<benchmark>/<scenario>/` at the
  * repository root.
@@ -169,7 +170,20 @@ const { positionals, values } = parseCommandLine();
 if (positionals.length === 0 && Object.keys(values).length === 0) {
   if (!process.stdin.isTTY || !process.stdout.isTTY) fail("evorca needs an interactive terminal.");
   const { openShell } = await import("./shell.js");
-  await openShell();
+  const dirs = dirsOf("openrca");
+  const upstreamUrl = readUpstreamUrl();
+  await openShell({
+    ...dirs,
+    evaluate: (request) =>
+      evaluateOpenRca({
+        ...dirs,
+        ...request,
+        jobs: undefined,
+        resume: undefined,
+        apiKey,
+        upstreamUrl,
+      }),
+  });
 } else {
   const [command, ...ids] = positionals;
   if (!isKeyOf(commands, command)) fail(usage);
@@ -187,17 +201,17 @@ if (positionals.length === 0 && Object.keys(values).length === 0) {
     fail(`Unknown scenario: ${unknown.join(", ")}. Choose from: ${known.join(", ")}`);
   }
 
+  await commands[command]({ benchmark, scenarios, runIds, flags: values, ...dirsOf(name) });
+}
+
+function dirsOf(benchmark: keyof typeof benchmarks) {
   const root = new URL("../../../", import.meta.url);
-  await commands[command]({
-    benchmark,
-    scenarios,
-    runIds,
-    flags: values,
-    dataDir: fileURLToPath(new URL(`data/benchmarks/${name}/`, root)),
+  return {
+    dataDir: fileURLToPath(new URL(`data/benchmarks/${benchmark}/`, root)),
     cacheDir: fileURLToPath(new URL(".cache/", root)),
-    runsDir: fileURLToPath(new URL(`data/runs/${name}/`, root)),
+    runsDir: fileURLToPath(new URL(`data/runs/${benchmark}/`, root)),
     agentsDir: fileURLToPath(new URL("agents/", root)),
-  });
+  };
 }
 
 async function printProgress(progress: AsyncIterable<FileProgress>) {

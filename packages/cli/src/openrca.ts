@@ -190,9 +190,15 @@ type ModelSession = {
   readonly relay: Relay;
 };
 
-const defaultModel: ModelId = "claude-sonnet-5";
-const defaultBudgetUsd = 50;
-const defaultTaskBudgetUsd = 2;
+/**
+ * The model of a run that names none, and the budgets in US dollars of a run
+ * and of each of its tasks.
+ */
+export const runDefaults: {
+  readonly model: ModelId;
+  readonly budgetUsd: number;
+  readonly taskBudgetUsd: number;
+} = { model: "claude-sonnet-5", budgetUsd: 50, taskBudgetUsd: 2 };
 
 /**
  * Runs an agent on the tasks of `scenarios`, `jobs` tasks at a time, each in
@@ -366,13 +372,13 @@ async function evaluateRun(
 
   const image = await ensureImage(name, agentsDir);
   const agentRecord: AgentRecord = { name, ...agent, image: image.tag, imageId: image.id };
-  const modelId = request.model ?? sameAs?.model?.id ?? defaultModel;
+  const modelId = request.model ?? sameAs?.model?.id ?? runDefaults.model;
   const model: ModelSettings | null = agent.needsModel
     ? {
         id: modelId,
         effort: request.effort ?? sameAs?.model?.effort ?? models[modelId].defaultEffort,
         taskBudgetUsd:
-          request.taskBudgetUsd ?? sameAs?.model?.taskBudgetUsd ?? defaultTaskBudgetUsd,
+          request.taskBudgetUsd ?? sameAs?.model?.taskBudgetUsd ?? runDefaults.taskBudgetUsd,
         upstreamUrl: request.upstreamUrl,
         prices: {
           table: priceTable.id,
@@ -404,7 +410,7 @@ async function evaluateRun(
     }
   }
   const budgetUsd = agent.needsModel
-    ? (request.budgetUsd ?? sameAs?.budgetUsd ?? defaultBudgetUsd)
+    ? (request.budgetUsd ?? sameAs?.budgetUsd ?? runDefaults.budgetUsd)
     : null;
   const seed = recorded?.seed ?? request.seed ?? randomInt(2 ** 32);
   const jobs = request.jobs ?? sameAs?.jobs ?? defaultJobs;
