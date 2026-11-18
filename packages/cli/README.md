@@ -8,7 +8,8 @@ The `evorca` command. From the repository root, `pnpm evorca` runs it without a 
 - The slash commands `/help` and `/exit`.
 - `evorca fetch`, which downloads the answer keys and the telemetry of a benchmark's scenarios into `data/benchmarks/<benchmark>/<scenario>/` at the repository root, or reads them from dataset archives on disk.
 - `evorca reproduce`, which downloads only the answer keys and checks that evorca reproduces the scores that a benchmark publishes. It keeps the scorer's checkout and environment in `.cache/` at the repository root.
-- `evorca evaluate`, which runs an agent from `agents/` on a benchmark's scenarios, one Docker container per task and several tasks at a time, scores the answers, and keeps each run in `data/runs/<benchmark>/<scenario>/` at the repository root. A run that stops can resume from its last finished task. An agent that calls a model reaches the Anthropic API only through a proxy that holds the API key and the budgets.
+- `evorca evaluate`, which runs an agent from `agents/` on a benchmark's scenarios, one Docker container per task and several tasks at a time, scores the answers, and keeps each run in `data/runs/<benchmark>/<scenario>/` at the repository root. A run that stops can resume from its last finished task. `--runs` repeats a run with the same settings. An agent that calls a model reaches the Anthropic API only through a proxy that holds the API key and the budgets.
+- `evorca report`, which prints the mean, the spread, the cost, and the wall time of finished runs from their folders.
 - One benchmark, `openrca`, through [`@evorca/openrca`](../openrca/README.md).
 
 ## Non-goals
@@ -27,10 +28,11 @@ evorca
 evorca fetch --benchmark=<benchmark> [--scenario=<scenario>...] [--archive=<path>...]
 evorca reproduce --benchmark=<benchmark> [--scenario=<scenario>...] [--archive=<path>...]
 evorca evaluate --benchmark=<benchmark> --agent=<agent> [--scenario=<scenario>...]
-                [--rows=<row>,...] [--jobs=<count>] [--model=<model>] [--effort=<effort>]
-                [--budget-usd=<dollars>] [--task-budget-usd=<dollars>]
+                [--runs=<count>] [--rows=<row>,...] [--jobs=<count>] [--model=<model>]
+                [--effort=<effort>] [--budget-usd=<dollars>] [--task-budget-usd=<dollars>]
 evorca evaluate --benchmark=<benchmark> --resume=<run ID> [--scenario=<scenario>...]
                 [--jobs=<count>] [--budget-usd=<dollars>]
+evorca report --benchmark=<benchmark> [--scenario=<scenario>...] <run ID>...
 ```
 
 - Without arguments, `evorca` opens the [interactive shell](#use-the-shell).
@@ -38,12 +40,14 @@ evorca evaluate --benchmark=<benchmark> --resume=<run ID> [--scenario=<scenario>
 - `--scenario` names one scenario and can repeat. Without it, the command uses every scenario of the benchmark. The `openrca` scenarios are `bank`, `telecom`, `market-cloudbed-1`, and `market-cloudbed-2`.
 - `--agent` is required by `evorca evaluate`, unless it resumes a run. The agents are `random` and [`react`](../../agents/react/README.md).
 - `--archive` names a dataset archive on disk and can repeat. `evorca fetch` and `evorca reproduce` read the files of that archive from disk instead of downloading them, and check them in the same way. See [Fetch a scenario](#fetch-a-scenario).
+- `--runs` sets how many complete runs `evorca evaluate` makes, one after another, with the same settings. Without it, the command makes one run. See [Repeat a run](#repeat-a-run).
 - `--rows` limits `evorca evaluate` to some rows of each scenario's `query.csv`, counted from 0, such as `--rows=0,7,21` for a pilot. Without it, the command runs every task.
 - `--jobs` sets how many tasks `evorca evaluate` runs at once. Without it, the command uses the `jobs` of the run it resumes, or else the agent's `jobs`.
 - `--model` and `--effort` set the model that the agent calls and its effort. The only model is `claude-sonnet-5`, and its default effort is `high`. The efforts are `low`, `medium`, `high`, `xhigh`, and `max`.
 - `--budget-usd` caps what the run spends on the model, in US dollars, and defaults to 50. `--task-budget-usd` caps what each task spends and defaults to 2.
 - The four model flags apply only to an agent that calls a model.
-- `--resume` continues the run with that ID. The run keeps its agent, seed, rows, and model settings. `--jobs` and `--budget-usd` can change. With `--scenario`, the command resumes only those scenarios of the run.
+- `--resume` continues the run with that ID. The run keeps its agent, seed, rows, and model settings. `--jobs` and `--budget-usd` can change. With `--scenario`, the command resumes only those scenarios of the run. Resuming one run of a `--runs` series finishes the whole series.
+- `evorca report` takes one or more run IDs. With `--scenario`, it reports only those scenarios.
 - `EVORCA_SEED`, a non-negative integer in the environment, sets the seed of `evorca evaluate`. Without it, the command picks a seed and prints it, or uses the seed of the run it resumes.
 - `ANTHROPIC_API_KEY` in the environment is the API key for an agent that calls a model. `pnpm evorca` reads it from `.env` at the repository root if the file exists. The command removes it from its environment before it starts any process.
 - `EVORCA_UPSTREAM_URL` replaces `https://api.anthropic.com` as the API that the model proxy calls, such as with a mock in a test.
@@ -60,7 +64,9 @@ fetched  data/benchmarks/openrca/telecom/telemetry/2020_04_11/trace/trace_span.c
 
 Both commands exit with code 1 and list the valid choices if the command, the benchmark, or a scenario is unknown. They also exit with code 1, and print the reason, if an `--archive` matches no archive of the benchmark, if a file on disk does not match its pinned hash, if the missing files need more than the free disk space, or if a download fails. The free-space message gives both sizes in GB. When Google Drive refuses a download because the file's quota is used up, the message names the archive, its link for a browser, and the command to run with `--archive` once you have downloaded it.
 
-`evorca evaluate` prints one line per task, then the outcomes and the accuracy of each scenario. It exits with code 1 and lists the agents if `--agent` is missing or unknown. Before it runs any task, it exits with code 1 if a model flag is given for an agent that calls no model, if an agent that calls a model has no API key, if a scenario's data is missing, with the `evorca fetch` command that downloads it, if a row in `--rows` does not exist, if Docker does not answer, if a container cannot reach the model proxy, or if the run to resume is missing or has other settings. It names each setting that differs.
+`evorca evaluate` prints one line per task, then the outcomes and the accuracy of each scenario. It exits with code 1 and lists the agents if `--agent` is missing or unknown. Before it runs any task, it exits with code 1 if a model flag is given for an agent that calls no model, if an agent that calls a model has no API key, if a scenario's data is missing, with the `evorca fetch` command that downloads it, if a row in `--rows` does not exist, if Docker does not answer, if a container cannot reach the model proxy, or if the run to resume is missing or has other settings. It names each setting that differs. It exits with code 1 for `--runs` together with `--resume`, because a resumed series keeps its number of runs.
+
+`evorca report` exits with code 1 if a run is missing, if two runs have other settings, or if no run of a scenario is finished. It names each setting that differs.
 
 ## Use the shell
 
@@ -148,7 +154,7 @@ telecom: 51 answered
   total     51 tasks  strict   5.88%  partial   8.80%
 ```
 
-A run with the same seed writes the same predictions, byte for byte, whatever its `--jobs`. Without `EVORCA_SEED`, the command picks a seed and prints it. One seed is one sample of the agent's accuracy, so compare agents over several seeds.
+A run with the same seed writes the same predictions, byte for byte, whatever its `--jobs`. Without `EVORCA_SEED`, the command picks a seed and prints it. One seed is one sample of the agent's accuracy, so compare agents over several runs with [`--runs`](#repeat-a-run).
 
 With `--jobs=4`, four containers run at once, and the lines come in the order that the tasks finish. If the agent's tasks together ask for more memory than Docker has, the command prints a warning before the first task. On Docker Desktop, set the memory under **Settings** > **Resources**.
 
@@ -190,15 +196,70 @@ Once the run's budget is spent, each task that has not started gets the outcome 
 
 ### Resume a run
 
-To stop a run, press ctrl+c. The command starts no more tasks and removes the run's containers. It waits for the model requests in flight, so the run records their cost. Then it removes the run's networks and prints the command that resumes the run. Press ctrl+c again to stop at once.
+To stop a run, press ctrl+c. The command starts no more tasks and removes the run's containers. It waits for the model requests in flight, so the run records their cost. It records each task that was running with the outcome `stopped` and what its `requests.jsonl` says it spent, so the totals in `run.json` match the request logs at once. Then it removes the run's networks and prints the command that resumes the run. Press ctrl+c again to stop at once.
 
 ```sh
 pnpm evorca evaluate --benchmark=openrca --resume=20261117T121537Z-random
 ```
 
-The resumed run skips each task that has an outcome in `run.json`, except `budget-exhausted`. It runs the other tasks again from the start, so it first deletes their folders. What a deleted task spent on the model stays in `run.json` under `abandoned` and counts toward the budget. The proxy records a request's cost when the response arrives. So a run that is killed, or stopped with a second ctrl+c, has no recorded cost for its requests in flight. The command removes containers and networks that a killed run left behind.
+The resumed run skips each task that has an outcome in `run.json`, except `budget-exhausted` and `stopped`. It runs the other tasks again from the start, so it first deletes their folders. What a deleted task spent on the model stays in `run.json` under `abandoned` and counts toward the budget. The proxy records a request's cost when the response arrives. So a run that is killed, or stopped with a second ctrl+c, has no recorded cost for its requests in flight. A killed run also records no `stopped` tasks, so its `run.json` lacks what its running tasks spent until the resume reads their `requests.jsonl`. The command removes containers and networks that a killed run left behind.
 
 It refuses to resume if the agent's folder, its entry in the `agents` table, `EVORCA_SEED`, `--rows`, or the model settings differ from the run's. The model settings are `--model`, `--effort`, `--task-budget-usd`, `EVORCA_UPSTREAM_URL`, and the price table. To finish a run that spent its budget, resume it with a larger `--budget-usd`.
+
+### Repeat a run
+
+Claude Sonnet 5 has no temperature setting, so one run of a model agent is one sample of its accuracy. To report a mean and a spread, make several runs with `--runs`:
+
+```sh
+pnpm evorca evaluate --benchmark=openrca --scenario=telecom --agent=react --runs=5
+```
+
+The command makes five complete runs, one after another, with the same settings. `--jobs` still sets how many tasks of a run go at once, and each run has its own `--budget-usd`. The runs form a series. Run `k` of series `<id>` has the run ID `<id>-<k>` and the seed of run 1 plus `k - 1`. So `EVORCA_SEED=7` gives the seeds 7 to 11, and the same command with the same seed repeats every run. Without `EVORCA_SEED`, the command picks the first seed and prints it. Each `run.json` records its `seed` and its place in the `series`. Each task line starts with the run, such as `run 2/5 telecom 3/51 task_2 answered 84.12 s`.
+
+Each run must keep the settings of the other runs of its series. If the agent's folder changes while a series runs, the next run does not start, and the command names the setting that differs.
+
+To finish a series that stopped, resume any of its runs. The command prints the command to use when the series starts, and again when ctrl+c stops it:
+
+```sh
+pnpm evorca evaluate --benchmark=openrca --resume=20261118T062557Z-react-1
+```
+
+The resume skips each finished run. It resumes the unfinished run from its last finished task, as for a single run, and then starts each run that has not started. It works the same after ctrl+c, a crash, or a killed process. If you set `EVORCA_SEED` for the resume, set it to the first seed of the series, as when the series started.
+
+After the last run, the command prints a summary of the series and the command that prints it again. For `random` with `EVORCA_SEED=7` and `--runs=3`:
+
+```text
+telecom: 3 runs of random
+
+| Accuracy (%)   | Tasks |  Mean |   SD |   Min |   Max |
+| -------------- | ----: | ----: | ---: | ----: | ----: |
+| easy strict    |    24 | 16.67 | 4.17 | 12.50 | 20.83 |
+| easy partial   |    24 | 16.67 | 4.17 | 12.50 | 20.83 |
+| middle strict  |    18 |  0.00 | 0.00 |  0.00 |  0.00 |
+| middle partial |    18 |  6.48 | 3.21 |  2.78 |  8.33 |
+| hard strict    |     9 |  0.00 | 0.00 |  0.00 |  0.00 |
+| hard partial   |     9 | 11.00 | 3.67 |  7.33 | 14.67 |
+| total strict   |    51 |  7.84 | 1.96 |  5.88 |  9.80 |
+| total partial  |    51 | 12.07 | 2.85 |  8.80 | 14.04 |
+
+| Run                       | Seed | Strict (%) | Partial (%) | Requests | Cost (USD) | Wall time |
+| ------------------------- | ---: | ---------: | ----------: | -------: | ---------: | --------: |
+| 20261118T062557Z-random-1 |    7 |       5.88 |        8.80 |        - |          - |   0:00:09 |
+| 20261118T062557Z-random-2 |    8 |       7.84 |       13.37 |        - |          - |   0:00:07 |
+| 20261118T062557Z-random-3 |    9 |       9.80 |       14.04 |        - |          - |   0:00:07 |
+| Mean                      |      |            |             |        - |          - |   0:00:08 |
+| Total                     |      |            |             |        - |          - |   0:00:23 |
+```
+
+The first table gives the mean, the sample standard deviation, the minimum, and the maximum of each accuracy over the runs, in percent. The second gives each run's seed, total accuracy, model requests, cost in US dollars, and wall time, then their mean and total. A run of several scenarios runs them one after another, so a scenario's wall time starts at the end of the scenario before it, or at the run's start for the first. The cost of a run includes what its stopped sessions spent, as `run.json` counts it. A wall time marked `*` belongs to a resumed run, so it includes the time between the run's sessions. The tables are Markdown, so they read in a terminal and paste into a document.
+
+To print the summary of finished runs again, name their run IDs:
+
+```sh
+pnpm evorca report --benchmark=openrca --scenario=telecom 20261118T062557Z-react-1 20261118T062557Z-react-2
+```
+
+`evorca report` reads only `run.json` and `scores.json`, and never scores again. It leaves out each run that a resume would continue, and names it. That includes a run with `budget-exhausted` tasks, which a resume with a larger `--budget-usd` finishes. It also names each run that does not cover a scenario. If no run of a scenario is finished, it says so, prints the other scenarios, and exits with code 1. It refuses runs whose agent, rows, or model settings differ, and names each setting that differs. The seed may differ, and the runs may come from several series or from single runs. So to add five runs to the series of seeds 7 to 11, run `--runs=5` with `EVORCA_SEED=12`, then report all ten.
 
 ### Read a run
 
@@ -219,6 +280,7 @@ Each run of a scenario lands in `data/runs/<benchmark>/<scenario>/<run ID>/`. Th
 The command writes `run.json` before the first task and again after each task. It writes a new file and renames it into place, so `run.json` is always whole. `run.json` holds:
 
 - `runId`, `benchmark`, and `scenario`.
+- `series`, only for a run of a `--runs` series: the series `id`, the number of this `run`, and the number of `runs`.
 - `agent`: the `name`, `seesCandidates`, `needsTelemetry`, `needsModel`, `timeoutSeconds`, `resources`, the `image` tag, and the `imageId`.
 - `seed`.
 - `rows`: the rows of the run, or `null` for every row.
@@ -230,7 +292,7 @@ The command writes `run.json` before the first task and again after each task. I
 - `pinnedInputs`: the OpenRCA commit, the Drive archives, and the SHA-256 of each answer key.
 - `startedAt`, in UTC.
 - `resumes`: the `startedAt`, `git`, and `versions` of each later session of the run.
-- `endedAt`, in UTC, or `null` while a task has no outcome.
+- `endedAt`, in UTC, or `null` until the run is scored.
 - `tasks`: the `row`, `taskIndex`, `outcome`, `exitCode`, `seconds`, and `usage` of each task, in row order.
 - `abandoned`: the `row` and `usage` of each task that a stopped session started and a resumed session deleted.
 - `usage`: the usage of the whole run, `abandoned` included.
@@ -277,6 +339,7 @@ Each task ends with one outcome. Only `answered` scores the agent's answer. Ever
 | `nonzero-exit`       | The container exits with another code.                                       |
 | `timeout`            | `evorca evaluate` kills the container at the agent's timeout.                |
 | `budget-exhausted`   | The run's model budget ran out before the task started or while it ran.      |
+| `stopped`            | ctrl+c or SIGTERM stopped the run while the task ran.                        |
 
 If Docker cannot start a container, `docker run` exits with code 125, and `evorca evaluate` stops and prints the container's log.
 

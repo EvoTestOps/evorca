@@ -56,8 +56,10 @@ import {
 } from "./models.js";
 import { startModelProxy, type ModelProxy } from "./proxy.js";
 import { proxyUrl, removeRunNetworks, startRelay, type Relay } from "./relay.js";
+import { reportRuns } from "./report.js";
 import {
   conflicts,
+  isFinished,
   readRuns,
   runPool,
   tasksToRun,
@@ -66,6 +68,7 @@ import {
   type GitState,
   type ModelSettings,
   type RunRecord,
+  type Series,
   type TaskRecord,
 } from "./runs.js";
 
@@ -124,14 +127,15 @@ export async function reproduceOpenRca({
 
 /**
  * What `evorca evaluate` asks for. `resume` names a run to continue. A setting
- * that is undefined comes from that run, or else from its default: the agent's
- * `jobs`, every row, a random seed, `claude-sonnet-5` at the model's default
- * effort, a $50 run budget, and a $2 task budget. `apiKey` is the real API key,
- * and `upstreamUrl` is the API that the model proxy forwards to.
+ * that is undefined comes from that run, or else from its default: one run, the
+ * agent's `jobs`, every row, a random seed, `claude-sonnet-5` at the model's
+ * default effort, a $50 run budget, and a $2 task budget. `apiKey` is the real
+ * API key, and `upstreamUrl` is the API that the model proxy forwards to.
  */
 export type EvaluateRequest = {
   readonly scenarios: readonly OpenRcaScenario[];
   readonly agent: AgentName | undefined;
+  readonly runs: number | undefined;
   readonly seed: number | undefined;
   readonly rows: readonly number[] | undefined;
   readonly jobs: number | undefined;
@@ -191,27 +195,96 @@ const defaultTaskBudgetUsd = 2;
  * accuracy per scenario. Each scenario's run lands in
  * `<runsDir>/<scenario>/<run id>/`, and its `run.json` is rewritten after every
  * task. A resumed run runs only the tasks that have no outcome or the outcome
- * `budget-exhausted`.
+ * `budget-exhausted` or `stopped`.
+ *
+ * With `runs` above 1, it makes that many runs one after another, as a series.
+ * Run `k` of series `<id>` has the run ID `<id>-<k>` and the seed of run 1 plus
+ * `k - 1`, and it must keep the settings of the other runs of the series.
+ * Resuming any run of a series finishes the series: it skips each run that
+ * `isFinished` accepts, resumes each other run, and starts each missing run.
+ * Then it prints the summary that `reportRuns` prints.
  *
  * If the agent calls a model, it starts the model proxy and the relay first.
  * Once the run's model budget is spent, each task that has not started gets
  * the outcome `budget-exhausted`, and so does each running task that the run's
  * budget cuts short. The budget counts every scenario of the run.
  *
- * Before any task, it prints the problem and returns false if a model flag is
- * given for an agent that calls no model, if an agent that calls a model has no
- * API key, if the run to resume is missing or has other settings, if a row does
- * not exist, if a scenario lacks the data that the agent reads, if Docker does
- * not answer, or if the relay cannot reach the proxy. Otherwise it returns true.
+ * Before any task of a run, it prints the problem and returns false if a model
+ * flag is given for an agent that calls no model, if an agent that calls a
+ * model has no API key, if the run to resume is missing or has other settings,
+ * if a run of a series has other settings than the series, if `seed` is not
+ * the first seed of the series that it resumes, if a row does not exist, if a
+ * scenario lacks the data that the agent reads, if Docker does not answer, or
+ * if the relay cannot reach the proxy. It also returns false if the summary of
+ * a series finds no finished run of a scenario. Otherwise it returns true.
  *
  * On SIGINT or SIGTERM, it starts no more tasks and removes the run's
  * containers. It waits for the model requests in flight, so the run records
- * their cost, then removes the run's networks and exits with 130 or 143. The
- * run can resume.
+ * their cost, then records each running task as `stopped` with what it spent,
+ * removes the run's networks, and exits with 130 or 143. The run can resume.
  *
  * @throws Error if git, an image build, a container start, or the evaluator fails.
  */
 export async function evaluateOpenRca(request: EvaluateRequest & Dirs): Promise<boolean> {
+  const { runsDir } = request;
+  const resumed =
+    request.resume === undefined
+      ? undefined
+      : await readRuns(runsDir, request.resume, request.scenarios);
+  const recorded = resumed?.values().next().value;
+  const place = recorded?.series;
+  if (place === undefined && (request.runs ?? 1) === 1) return evaluateRun(request, undefined);
+
+  const name = recorded?.agent.name ?? request.agent;
+  if (name === undefined) throw new Error("evaluateOpenRca needs an agent or a run to resume.");
+  const id = place?.id ?? newRunId(name);
+  const runs = place?.runs ?? request.runs ?? 1;
+  const firstSeed =
+    recorded === undefined || place === undefined
+      ? (request.seed ?? randomInt(2 ** 32))
+      : recorded.seed - place.run + 1;
+  if (request.seed !== undefined && request.seed !== firstSeed) {
+    console.error(`The runs of ${id} start at seed ${firstSeed}, not ${request.seed}.`);
+    return false;
+  }
+  const scenarios = resumed === undefined ? request.scenarios : [...resumed.keys()];
+  const runIds = Array.from({ length: runs }, (_, index) => `${id}-${index + 1}`);
+  const lastSeed = firstSeed + runs - 1;
+  console.log(`${runs} runs, ${runIds[0]} to ${runIds.at(-1)}, seeds ${firstSeed} to ${lastSeed}.`);
+  const finish = `pnpm evorca evaluate --benchmark=openrca --resume=${runIds[0]}`;
+  console.log(`If they stop, finish them with: ${finish}`);
+
+  let sameAs = recorded;
+  for (const [index, runId] of runIds.entries()) {
+    const existing = await readRuns(runsDir, runId, scenarios);
+    if (existing.size > 0 && [...existing.values()].every(isFinished)) {
+      console.log(`\nRun ${index + 1} of ${runs}, ${runId}, is done.`);
+    } else {
+      console.log("");
+      const member = { runId, series: { id, run: index + 1, runs }, sameAs };
+      const resume = existing.size > 0 ? runId : undefined;
+      const run = { ...request, scenarios, seed: firstSeed + index, resume };
+      if (!(await evaluateRun(run, member))) return false;
+    }
+    sameAs ??= (await readRuns(runsDir, runId, scenarios)).values().next().value;
+  }
+  if (!(await reportRuns({ runsDir, scenarios, runIds }))) return false;
+  const flags = scenarios.map((scenario) => `--scenario=${scenario}`).join(" ");
+  const report = `pnpm evorca report --benchmark=openrca ${flags} ${runIds.join(" ")}`;
+  console.log(`\nPrint this summary again with: ${report}`);
+  return true;
+}
+
+type Member = {
+  readonly runId: string;
+  readonly series: Series;
+  readonly sameAs: RunRecord | undefined;
+};
+
+async function evaluateRun(
+  request: EvaluateRequest & Dirs,
+  member: Member | undefined,
+): Promise<boolean> {
   const { dataDir, cacheDir, runsDir, agentsDir } = request;
   const runRecords =
     request.resume === undefined
@@ -230,8 +303,11 @@ export async function evaluateOpenRca(request: EvaluateRequest & Dirs): Promise<
     return false;
   }
   const recorded = resumed?.values().next().value;
-  const name = recorded?.agent.name ?? request.agent;
+  const sameAs = recorded ?? member?.sameAs;
+  const name = sameAs?.agent.name ?? request.agent;
   if (name === undefined) throw new Error("evaluateOpenRca needs an agent or a run to resume.");
+  const runId = recorded?.runId ?? member?.runId ?? newRunId(name);
+  const series = recorded?.series ?? member?.series;
   const scenarios = resumed === undefined ? request.scenarios : [...resumed.keys()];
   const { jobs: defaultJobs, ...agent } = agents[name];
 
@@ -261,7 +337,7 @@ export async function evaluateOpenRca(request: EvaluateRequest & Dirs): Promise<
   }
   const tasks = new Map<OpenRcaScenario, OpenRcaTask[]>();
   for (const scenario of scenarios) tasks.set(scenario, await readTasks(scenario, dataDir));
-  const rows = request.rows ?? recorded?.rows ?? null;
+  const rows = request.rows ?? sameAs?.rows ?? null;
   for (const [scenario, scenarioTasks] of tasks) {
     const unknown = rows?.filter((row) => row >= scenarioTasks.length) ?? [];
     if (unknown.length > 0) {
@@ -278,13 +354,13 @@ export async function evaluateOpenRca(request: EvaluateRequest & Dirs): Promise<
 
   const image = await ensureImage(name, agentsDir);
   const agentRecord: AgentRecord = { name, ...agent, image: image.tag, imageId: image.id };
-  const modelId = request.model ?? recorded?.model?.id ?? defaultModel;
+  const modelId = request.model ?? sameAs?.model?.id ?? defaultModel;
   const model: ModelSettings | null = agent.needsModel
     ? {
         id: modelId,
-        effort: request.effort ?? recorded?.model?.effort ?? models[modelId].defaultEffort,
+        effort: request.effort ?? sameAs?.model?.effort ?? models[modelId].defaultEffort,
         taskBudgetUsd:
-          request.taskBudgetUsd ?? recorded?.model?.taskBudgetUsd ?? defaultTaskBudgetUsd,
+          request.taskBudgetUsd ?? sameAs?.model?.taskBudgetUsd ?? defaultTaskBudgetUsd,
         upstreamUrl: request.upstreamUrl,
         prices: {
           table: priceTable.id,
@@ -294,24 +370,32 @@ export async function evaluateOpenRca(request: EvaluateRequest & Dirs): Promise<
         },
       }
     : null;
-  if (recorded !== undefined) {
-    const problems = conflicts(recorded, { agent: agentRecord, seed: request.seed, rows, model });
+  if (sameAs !== undefined) {
+    const seed = recorded === undefined ? undefined : request.seed;
+    const problems = conflicts(sameAs, { agent: agentRecord, seed, rows, model });
     if (problems.length > 0) {
-      console.error(`Run ${recorded.runId} cannot resume with other settings:`);
+      console.error(
+        recorded === undefined
+          ? `Run ${runId} cannot start, because its settings differ from run ${sameAs.runId}:`
+          : `Run ${runId} cannot resume with other settings:`,
+      );
       for (const problem of problems) console.error(`  ${problem}`);
       return false;
     }
   }
   const budgetUsd = agent.needsModel
-    ? (request.budgetUsd ?? recorded?.budgetUsd ?? defaultBudgetUsd)
+    ? (request.budgetUsd ?? sameAs?.budgetUsd ?? defaultBudgetUsd)
     : null;
   const seed = recorded?.seed ?? request.seed ?? randomInt(2 ** 32);
-  const jobs = request.jobs ?? recorded?.jobs ?? defaultJobs;
-  const runId = recorded?.runId ?? `${new Date().toISOString().replace(/[-:]|\.\d+/g, "")}-${name}`;
+  const jobs = request.jobs ?? sameAs?.jobs ?? defaultJobs;
   const git = await gitState(agentsDir);
   const versions = { node: process.version, docker };
   console.log(`Agent ${name}, image ${image.tag}, ${image.id}`);
-  console.log(`Seed ${seed}. Set EVORCA_SEED=${seed} to repeat this run.`);
+  console.log(
+    series === undefined
+      ? `Seed ${seed}. Set EVORCA_SEED=${seed} to repeat this run.`
+      : `Seed ${seed}.`,
+  );
   console.log(`git ${git.commit}${git.dirty ? " with uncommitted changes" : ""}`);
   console.log(`node ${process.version}, docker ${docker.client}, daemon ${docker.server}`);
   if (model !== null) {
@@ -319,7 +403,8 @@ export async function evaluateOpenRca(request: EvaluateRequest & Dirs): Promise<
     console.log(`Model ${model.id}, effort ${model.effort}, ${budgets}, via ${model.upstreamUrl}`);
   }
   const pace = `${jobs} ${jobs === 1 ? "task" : "tasks"} at a time`;
-  console.log(`${recorded === undefined ? "Run" : "Resuming run"} ${runId}, ${pace}.`);
+  const which = series === undefined ? "" : ` ${series.run} of ${series.runs},`;
+  console.log(`${recorded === undefined ? "Run" : "Resuming run"}${which} ${runId}, ${pace}.`);
   const memoryMiB = await dockerMemoryMiB();
   if (jobs * agent.resources.memoryMiB > memoryMiB) {
     const asked = `${jobs} tasks at ${agent.resources.memoryMiB} MiB`;
@@ -352,6 +437,7 @@ export async function evaluateOpenRca(request: EvaluateRequest & Dirs): Promise<
             runId,
             benchmark: "openrca",
             scenario,
+            series,
             agent: agentRecord,
             seed,
             rows,
@@ -460,9 +546,9 @@ export async function evaluateOpenRca(request: EvaluateRequest & Dirs): Promise<
       console.error(`Could not remove the containers and networks of run ${runId}: ${reason}`);
     });
     if (stopSignal !== undefined) {
-      console.error(
-        `Stopped. Resume with: pnpm evorca evaluate --benchmark=openrca --resume=${runId}`,
-      );
+      const resume = `pnpm evorca evaluate --benchmark=openrca --resume=${runId}`;
+      const what = series === undefined ? "Resume" : `Finish the ${series.runs} runs`;
+      console.error(`Stopped. ${what} with: ${resume}`);
       process.exit(stopSignal === "SIGINT" ? 130 : 143);
     }
   }
@@ -470,8 +556,8 @@ export async function evaluateOpenRca(request: EvaluateRequest & Dirs): Promise<
 
 /**
  * Runs the tasks of one scenario that `tasksToRun` picks, rewrites `run.json`
- * after each, then scores the run. It returns the scores of the run's rows, or
- * undefined if the session's signal aborts.
+ * after each, then scores the run and sets `endedAt`. It returns the scores of
+ * the run's rows, or undefined if the session's signal aborts.
  */
 async function evaluateScenario(
   { scenario, tasks, selected, runDir, record }: ScenarioPlan,
@@ -483,6 +569,8 @@ async function evaluateScenario(
   const done = records.size > 0 ? `, ${records.size} done` : "";
   const folder = relative(process.cwd(), runDir);
   const count = `${selected.length} ${selected.length === 1 ? "task" : "tasks"}`;
+  const { series } = record;
+  const label = series === undefined ? scenario : `run ${series.run}/${series.runs} ${scenario}`;
   console.log(`\n${scenario}: ${count}${done}, run folder ${folder}`);
   let saving = Promise.resolve();
   const save = (endedAt: string | null) => {
@@ -501,21 +589,22 @@ async function evaluateScenario(
         if (signal.aborted) return undefined;
         throw error;
       });
-      if (taskRecord === undefined || signal.aborted) return;
+      if (taskRecord === undefined) return;
       records.set(task.row, taskRecord);
-      const { taskIndex, outcome, seconds, usage } = taskRecord;
-      const progress = `${records.size}/${selected.length} ${taskIndex}`;
-      const cost =
-        model === undefined || usage === null
-          ? ""
-          : `, $${usage.costUsd.toFixed(4)}, run $${model.proxy.usage().costUsd.toFixed(4)}`;
-      console.log(`${scenario} ${progress} ${outcome} ${seconds.toFixed(2)} s${cost}`);
+      if (!signal.aborted) {
+        const { taskIndex, outcome, seconds, usage } = taskRecord;
+        const progress = `${records.size}/${selected.length} ${taskIndex}`;
+        const cost =
+          model === undefined || usage === null
+            ? ""
+            : `, $${usage.costUsd.toFixed(4)}, run $${model.proxy.usage().costUsd.toFixed(4)}`;
+        console.log(`${label} ${progress} ${outcome} ${seconds.toFixed(2)} s${cost}`);
+      }
       await save(null);
     },
     signal,
   );
   if (signal.aborted) return undefined;
-  await save(new Date().toISOString());
 
   const diagnoses = new Map<number, Diagnosis>();
   for (const { row, outcome } of records.values()) {
@@ -531,6 +620,7 @@ async function evaluateScenario(
   ).filter((score) => rows.has(score.row));
   const summary = summarize(scores);
   await writeFile(join(runDir, "scores.json"), json({ summary, scores }));
+  await save(new Date().toISOString());
 
   const outcomes = Map.groupBy(records.values(), (task) => task.outcome);
   const counts = [...outcomes].map(([outcome, tasks]) => `${tasks.length} ${outcome}`);
@@ -548,7 +638,8 @@ async function evaluateScenario(
  * calls a model, the task gets a token and a network for the time it runs. Its
  * outcome is `budget-exhausted` if the run's budget is spent before it starts,
  * or if the run's budget denies one of its requests, because which running
- * tasks the run's budget cuts short depends on timing.
+ * tasks the run's budget cuts short depends on timing. Its outcome is
+ * `stopped`, with what it spent, if the session's signal aborts while it runs.
  *
  * @throws Error if the session's signal aborts before the container starts, or
  *   if the relay stopped while the task ran.
@@ -572,7 +663,7 @@ async function runTask(
   const container = { runId, name, image: agent.imageId, agent, taskDir, dataDir, scenario, seed };
   const logPath = join(taskDir, "log.txt");
   const started = performance.now();
-  let exit: Exit;
+  let exit: Exit | undefined;
   let usage: ModelUsage | null = null;
   let cutByRun = false;
   if (model === undefined) {
@@ -597,6 +688,8 @@ async function runTask(
       signal.throwIfAborted();
       exit = await runContainer({ ...container, model: access }, logPath);
       await relay.assertRunning();
+    } catch (error: unknown) {
+      if (!signal.aborted) throw error;
     } finally {
       usage = await proxy.closeTask(token);
       // The task's outcome is already known. A network that fails to close stays
@@ -606,6 +699,9 @@ async function runTask(
     cutByRun = usage.budgetExhausted && usage.costUsd < settings.taskBudgetUsd;
   }
   const seconds = Math.round(performance.now() - started) / 1000;
+  if (signal.aborted || exit === undefined) {
+    return { row, taskIndex, outcome: "stopped", exitCode: null, seconds, usage };
+  }
   const prediction = await readFile(join(taskDir, "out", "prediction.json"), "utf8").catch(
     () => undefined,
   );
@@ -635,6 +731,10 @@ const allScenarios = Object.keys(openRcaScenarios).filter((scenario): scenario i
 
 function taskDirOf(runDir: string, row: number): string {
   return join(runDir, "tasks", String(row).padStart(3, "0"));
+}
+
+function newRunId(agent: AgentName): string {
+  return `${new Date().toISOString().replace(/[-:]|\.\d+/g, "")}-${agent}`;
 }
 
 async function gitState(dir: string): Promise<GitState> {

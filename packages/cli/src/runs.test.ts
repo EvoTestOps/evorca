@@ -100,11 +100,11 @@ describe("tasksToRun", () => {
     expect(tasksToRun(tasks, [record(3), record(0)])).toEqual([{ row: 1 }, { row: 2 }, { row: 4 }]);
   });
 
-  it("runs again a task that the run's budget kept from starting", () => {
-    const tasks = [0, 1, 2].map((row) => ({ row }));
+  it("runs again a task that the run's budget kept from starting or that a stop cut short", () => {
+    const tasks = [0, 1, 2, 3].map((row) => ({ row }));
     const records = [record(0), record(1, "budget-exhausted"), record(2, "timeout")];
 
-    expect(tasksToRun(tasks, records)).toEqual([{ row: 1 }]);
+    expect(tasksToRun(tasks, [...records, record(3, "stopped")])).toEqual([{ row: 1 }, { row: 3 }]);
   });
 
   it("runs every task of a new run and none of a finished one", () => {

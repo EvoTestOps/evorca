@@ -13,7 +13,8 @@
  * that copy on disk instead of downloading them.
  * `evorca evaluate` runs an agent from `agents/` on those scenarios, one Docker
  * container per task, scores its answers, and keeps each run in
- * `data/runs/<benchmark>/<scenario>/`.
+ * `data/runs/<benchmark>/<scenario>/`. `evorca report` prints the summary of
+ * finished runs from those folders.
  *
  * The command takes the real API key from `ANTHROPIC_API_KEY` and then deletes
  * the variable, so no Docker command, container, or evaluator that it starts
@@ -32,6 +33,7 @@ import { answerKeyFiles, fetchOpenRcaData, type FileProgress } from "@evorca/ope
 import { agents } from "./agents.js";
 import { efforts, models } from "./models.js";
 import { evaluateOpenRca, reproduceOpenRca } from "./openrca.js";
+import { reportRuns } from "./report.js";
 
 const apiKey = process.env.ANTHROPIC_API_KEY;
 delete process.env.ANTHROPIC_API_KEY;
@@ -43,6 +45,7 @@ const benchmarks = {
     fetch: fetchOpenRcaData,
     reproduce: reproduceOpenRca,
     evaluate: evaluateOpenRca,
+    report: reportRuns,
   },
 };
 
@@ -51,6 +54,7 @@ type Benchmark = (typeof benchmarks)[keyof typeof benchmarks];
 type Invocation = {
   readonly benchmark: Benchmark;
   readonly scenarios: readonly (keyof Benchmark["scenarios"])[];
+  readonly runIds: readonly string[];
   readonly flags: Flags;
   readonly dataDir: string;
   readonly cacheDir: string;
@@ -69,8 +73,11 @@ const commands = {
     await printProgress(benchmark.fetch({ scenarios, dataDir, files, localArchives }));
     if (!(await benchmark.reproduce({ scenarios, dataDir, cacheDir }))) process.exitCode = 1;
   },
-  async evaluate({ benchmark, scenarios, flags, ...dirs }: Invocation) {
-    const resume = flags.resume === undefined ? undefined : parseRunId(flags.resume);
+  async evaluate({ benchmark, scenarios, flags, runIds: _, ...dirs }: Invocation) {
+    const resume = flags.resume === undefined ? undefined : parseRunId(flags.resume, "--resume");
+    if (resume !== undefined && flags.runs !== undefined) {
+      fail("--runs starts new runs. A resumed run keeps the number of runs it started with.");
+    }
     const agent =
       flags.agent === undefined && resume !== undefined
         ? undefined
@@ -79,6 +86,7 @@ const commands = {
       ...dirs,
       scenarios,
       agent,
+      runs: flags.runs === undefined ? undefined : parseCount(flags.runs, "--runs"),
       resume,
       seed: readSeed(),
       rows: flags.rows === undefined ? undefined : parseRows(flags.rows),
@@ -98,6 +106,9 @@ const commands = {
     };
     if (!(await benchmark.evaluate(options))) process.exitCode = 1;
   },
+  async report({ benchmark, scenarios, runIds, runsDir }: Invocation) {
+    if (!(await benchmark.report({ scenarios, runIds, runsDir }))) process.exitCode = 1;
+  },
 };
 
 const usage = [
@@ -105,10 +116,11 @@ const usage = [
   "       evorca <fetch|reproduce> --benchmark=<benchmark> [--scenario=<scenario>...]",
   "                [--archive=<path>...]",
   "       evorca evaluate --benchmark=<benchmark> --agent=<agent> [--scenario=<scenario>...]",
-  "                [--rows=<row>,...] [--jobs=<count>] [--model=<model>] [--effort=<effort>]",
-  "                [--budget-usd=<dollars>] [--task-budget-usd=<dollars>]",
+  "                [--runs=<count>] [--rows=<row>,...] [--jobs=<count>] [--model=<model>]",
+  "                [--effort=<effort>] [--budget-usd=<dollars>] [--task-budget-usd=<dollars>]",
   "       evorca evaluate --benchmark=<benchmark> --resume=<run id> [--scenario=<scenario>...]",
   "                [--jobs=<count>] [--budget-usd=<dollars>]",
+  "       evorca report --benchmark=<benchmark> [--scenario=<scenario>...] <run id>...",
 ].join("\n");
 
 const { positionals, values } = parseCommandLine();
@@ -117,8 +129,9 @@ if (positionals.length === 0 && Object.keys(values).length === 0) {
   const { openShell } = await import("./shell.js");
   await openShell();
 } else {
-  const [command] = positionals;
-  if (positionals.length !== 1 || !isKeyOf(commands, command)) fail(usage);
+  const [command, ...ids] = positionals;
+  if (!isKeyOf(commands, command) || (command === "report") !== ids.length > 0) fail(usage);
+  const runIds = ids.map((id) => parseRunId(id, "evorca report"));
 
   const name = choose(benchmarks, values.benchmark, "benchmark");
   const benchmark = benchmarks[name];
@@ -134,6 +147,7 @@ if (positionals.length === 0 && Object.keys(values).length === 0) {
   await commands[command]({
     benchmark,
     scenarios,
+    runIds,
     flags: values,
     dataDir: fileURLToPath(new URL(`data/benchmarks/${name}/`, root)),
     cacheDir: fileURLToPath(new URL(".cache/", root)),
@@ -156,6 +170,7 @@ async function printProgress(progress: AsyncIterable<FileProgress>) {
 type Flags = {
   readonly archive?: readonly string[] | undefined;
   readonly agent?: string | undefined;
+  readonly runs?: string | undefined;
   readonly rows?: string | undefined;
   readonly jobs?: string | undefined;
   readonly resume?: string | undefined;
@@ -174,6 +189,7 @@ function parseCommandLine() {
         scenario: { type: "string", multiple: true },
         agent: { type: "string" },
         archive: { type: "string", multiple: true },
+        runs: { type: "string" },
         rows: { type: "string" },
         jobs: { type: "string" },
         resume: { type: "string" },
@@ -235,9 +251,9 @@ function readUpstreamUrl(): string {
   return url;
 }
 
-function parseRunId(text: string): string {
+function parseRunId(text: string, taker: string): string {
   if (!/^\d{8}T\d{6}Z-[a-z0-9-]+$/.test(text)) {
-    fail(`--resume takes a run ID, such as 20261117T121537Z-random, not ${JSON.stringify(text)}.`);
+    fail(`${taker} takes a run ID, such as 20261117T121537Z-random, not ${JSON.stringify(text)}.`);
   }
   return text;
 }

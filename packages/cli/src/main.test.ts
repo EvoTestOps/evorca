@@ -67,6 +67,7 @@ describe("evorca evaluate", () => {
     ["--jobs=two", "--jobs must be a positive integer"],
     ["--rows=0,,7", "--rows must list row numbers"],
     ["--rows=-1", "--rows must list row numbers"],
+    ["--runs=0", "--runs must be a positive integer"],
   ])("exits with code 1 for %s", async (flag, message) => {
     const { code, stderr } = await evorca(
       "evaluate",
@@ -130,6 +131,34 @@ describe("evorca evaluate", () => {
 
     expect(code).toBe(1);
     expect(stderr).toContain("--resume takes a run ID");
+  });
+
+  it("exits with code 1 for --runs on a resumed run, which keeps its number of runs", async () => {
+    const { code, stderr } = await evorca(
+      "evaluate",
+      "--benchmark=openrca",
+      "--resume=20261117T121537Z-random-1",
+      "--runs=5",
+    );
+
+    expect(code).toBe(1);
+    expect(stderr).toContain("--runs starts new runs");
+  });
+});
+
+describe("evorca report", () => {
+  it("exits with code 1 and shows the usage without a run ID", async () => {
+    const { code, stderr } = await evorca("report", "--benchmark=openrca");
+
+    expect(code).toBe(1);
+    expect(stderr).toContain("evorca report --benchmark=<benchmark>");
+  });
+
+  it("exits with code 1 for a run ID that is not one", async () => {
+    const { code, stderr } = await evorca("report", "--benchmark=openrca", "../x");
+
+    expect(code).toBe(1);
+    expect(stderr).toContain("evorca report takes a run ID");
   });
 });
 

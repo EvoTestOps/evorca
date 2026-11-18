@@ -54,6 +54,13 @@ export type AgentRecord = Omit<Agent, "jobs"> & {
 /** The git commit of a session of a run, and whether the checkout had uncommitted changes. */
 export type GitState = { readonly commit: string; readonly dirty: boolean };
 
+/**
+ * A run's place in a series of runs with the same settings: run `run` of
+ * `runs`. Run `k` of series `id` has the run ID `<id>-<k>` and the seed of run
+ * 1 plus `k - 1`.
+ */
+export type Series = { readonly id: string; readonly run: number; readonly runs: number };
+
 /** The Node version and the Docker versions of a session of a run. */
 export type Versions = {
   readonly node: string;
@@ -61,19 +68,20 @@ export type Versions = {
 };
 
 /**
- * What `run.json` records about the run of one agent on one scenario. `rows` is
+ * What `run.json` records about the run of one agent on one scenario. `series`
+ * is missing unless the run is one of several that `--runs` started. `rows` is
  * null when the run covers every task. `model` and `budgetUsd`, the model budget
  * of the whole run over all its scenarios, are null unless the agent calls a
  * model. `jobs` and `budgetUsd` hold the values of the latest session.
  * `resumes` lists each later session of the run, and `endedAt` is null until
- * every task has an outcome. `abandoned` holds the usage of the tasks that a
- * stopped session left without an outcome, which ran again. `usage` adds up
- * the usage of the tasks and of `abandoned`.
+ * the run is scored. `abandoned` holds what each task that a resume ran again
+ * had spent before. `usage` adds up the usage of the tasks and of `abandoned`.
  */
 export type RunRecord = {
   readonly runId: string;
   readonly benchmark: "openrca";
   readonly scenario: OpenRcaScenario;
+  readonly series?: Series;
   readonly agent: AgentRecord;
   readonly seed: number;
   readonly rows: readonly number[] | null;
@@ -106,9 +114,10 @@ const conditionKeys = [
 ] as const satisfies readonly (keyof Conditions)[];
 
 /**
- * Returns one line for each setting that a resumed run asks for and that
- * differs from the run's own. A line names the field that differs, such as
- * `model.effort`. An undefined setting keeps the run's.
+ * Returns one line for each setting in `requested` that differs from the one
+ * in `recorded`, such as a setting that a resumed run asks for. A line names
+ * the field that differs, such as `model.effort`, and says "the run has" the
+ * value in `recorded`. An undefined setting in `requested` matches any.
  */
 export function conflicts(recorded: Conditions, requested: Partial<Conditions>): string[] {
   return conditionKeys.flatMap((key) =>
@@ -125,18 +134,25 @@ function differences(path: string, recorded: unknown, requested: unknown): strin
   return [`${path}: the run has ${JSON.stringify(recorded)}, not ${JSON.stringify(requested)}`];
 }
 
+const rerunOutcomes: ReadonlySet<Outcome> = new Set(["budget-exhausted", "stopped"]);
+
 /**
- * Returns the tasks of `tasks` that have no outcome in `records`, in the order
- * of `tasks`. A `budget-exhausted` task never started, so it runs again.
+ * Returns the tasks of `tasks` that have no outcome in `records`, or the
+ * outcome `budget-exhausted` or `stopped`, in the order of `tasks`.
  */
 export function tasksToRun<T extends { readonly row: number }>(
   tasks: readonly T[],
   records: readonly TaskRecord[],
 ): T[] {
   const done = new Set(
-    records.filter((record) => record.outcome !== "budget-exhausted").map((record) => record.row),
+    records.filter((record) => !rerunOutcomes.has(record.outcome)).map((record) => record.row),
   );
   return tasks.filter((task) => !done.has(task.row));
+}
+
+/** Whether a run is scored and none of its tasks would run again on a resume. */
+export function isFinished(record: RunRecord): record is RunRecord & { readonly endedAt: string } {
+  return record.endedAt !== null && !record.tasks.some((task) => rerunOutcomes.has(task.outcome));
 }
 
 /**
