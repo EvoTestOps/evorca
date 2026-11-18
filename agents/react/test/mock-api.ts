@@ -1,6 +1,6 @@
 /**
  * A scripted stand-in for the Messages API. It answers each `POST /v1/messages`
- * with the next scripted reply and records the raw request bodies, so a test
+ * with the next scripted reply and records the raw request bodies and headers, so a test
  * can point the real SDK at it and check what the agent sent.
  *
  * It uses only Node's built-in modules, so `node test/mock-api.ts <replies>
@@ -9,16 +9,17 @@
  * @module
  */
 import { readFile } from "node:fs/promises";
-import { createServer } from "node:http";
+import { createServer, type IncomingHttpHeaders } from "node:http";
 import type { AddressInfo } from "node:net";
 
 /** One scripted reply: an HTTP status and a JSON body. */
 export type Reply = { readonly status: number; readonly body: unknown };
 
-/** A running mock. `requests` holds the raw body of each request, in order. */
+/** A running mock. `requests` holds the raw body of each request, in order, and `headers` its headers. */
 export type MockApi = {
   readonly url: string;
   readonly requests: string[];
+  readonly headers: IncomingHttpHeaders[];
   close(): Promise<void>;
 };
 
@@ -28,6 +29,7 @@ export async function startMockApi(
   { host = "127.0.0.1", port = 0 } = {},
 ): Promise<MockApi> {
   const requests: string[] = [];
+  const headers: IncomingHttpHeaders[] = [];
   const server = createServer(async (request, response) => {
     let body = "";
     for await (const chunk of request) body += chunk;
@@ -36,6 +38,7 @@ export async function startMockApi(
       return;
     }
     requests.push(body);
+    headers.push(request.headers);
     const reply = replies[requests.length - 1] ?? {
       status: 500,
       body: { type: "error", error: { type: "api_error", message: "No scripted reply left" } },
@@ -49,6 +52,7 @@ export async function startMockApi(
   return {
     url: `http://${host}:${address.port}`,
     requests,
+    headers,
     close: () => new Promise((resolve) => server.close(() => resolve())),
   };
 }

@@ -64,7 +64,7 @@ export type Summary = Omit<Outcome, "causes" | "costUsd"> & {
  */
 export const limits: Limits = { maxSteps: 50, commandTimeoutSeconds: 120, outputChars: 16_000 };
 
-const maxTokens = [16_000, 64_000] as const;
+const maxTokens = [16_000, 32_000] as const;
 const wrapUpShare = 0.8;
 
 /**

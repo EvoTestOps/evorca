@@ -134,6 +134,12 @@ type ToolResult = { readonly output: string; readonly isError: boolean; readonly
 const budgetExhausted = "evorca_budget_exhausted";
 const wrapUpResponses = 2;
 
+/**
+ * Past the model proxy's 15-minute cut, because the SDK retries a request that
+ * it times out while the proxy may still serve it.
+ */
+const requestTimeoutMs = 16 * 60_000;
+
 const nudge =
   "You ended your turn without calling submit_answer. Call submit_answer now with your answer, or continue the investigation with bash if you need more evidence.";
 
@@ -188,9 +194,7 @@ export async function investigate(options: LoopOptions): Promise<Outcome> {
           output_config: { effort: settings.effort },
           cache_control: { type: "ephemeral" },
         },
-        // Without a timeout, the SDK refuses a non-streaming request that it expects to take over
-        // 10 minutes, at an hour per 128,000 max_tokens.
-        { timeout: Math.max(10 * 60_000, (60 * 60_000 * maxTokens) / 128_000) },
+        { timeout: requestTimeoutMs },
       );
       turns += 1;
       usage = addUsage(usage, message.usage);

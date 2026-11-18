@@ -53,11 +53,13 @@ Each request sends the same system prompt and tools, and appends to the same his
 | Limit                      | Value               | Reason                                                                                   |
 | -------------------------- | ------------------- | ---------------------------------------------------------------------------------------- |
 | Tool calls                 | 50                  | RCA-Agent runs at most 25 controller steps, and each step can run code twice.            |
-| Time per command           | 120 s               | RCA-Agent stops a cell after 60 s on two CPUs. The container has one.                    |
+| Time per command           | 120 s               | RCA-Agent stops a cell after 60 s on two CPUs, as many as the container has.             |
 | Output per command         | 16,000 characters   | Longer output keeps its start and its end.                                               |
-| Output tokens per response | 16,000, then 64,000 | A response cut off at the limit is discarded and asked again once with the larger limit. |
+| Output tokens per response | 16,000, then 32,000 | A response cut off at the limit is discarded and asked again once with the larger limit. |
 
 After the last tool call, at 80% of the budget, or at 80% of the time, the agent refuses commands and asks for the answer. A model that ends its turn without an answer is asked once to submit. A refusal, a full context window, or an API error ends the task. The proxy's `evorca_budget_exhausted` 403 is one such error.
+
+The model proxy ends a request after 15 minutes with a 504, which ends the task as an API error. The agent waits 16 minutes for each response, because the SDK retries a request that it times out, and the proxy may still serve that request. 32,000 output tokens is the most that the SDK, at its planning rate of 128,000 tokens an hour, expects to finish in 15 minutes.
 
 ## Update the background
 

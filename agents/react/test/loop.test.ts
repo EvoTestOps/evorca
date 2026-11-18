@@ -95,6 +95,7 @@ async function run(
     trajectory,
     requests,
     rawRequests: mock.requests,
+    headers: mock.headers,
     shellCwd,
   };
 }
@@ -376,9 +377,20 @@ describe("the ReAct loop", () => {
     ]);
 
     expect(existsSync(join(result.shellCwd, "cut"))).toBe(false);
-    expect(result.requests.map((request) => request.max_tokens)).toEqual([16000, 64000]);
+    expect(result.requests.map((request) => request.max_tokens)).toEqual([16000, 32000]);
     expect(result.requests[1]?.messages).toEqual(result.requests[0]?.messages);
     expect(result.summary).toMatchObject({ stopCause: "submitted", turns: 2 });
+  });
+
+  it("waits longer for each response than the model proxy's 15 minutes", async () => {
+    const result = await run([
+      message(thought("A long thought"), { stopReason: "max_tokens" }),
+      message([submitCall([answer])]),
+    ]);
+
+    expect(result.headers.map((headers) => Number(headers["x-stainless-timeout"]))).toEqual([
+      960, 960,
+    ]);
   });
 
   it("stops when the largest output limit is not enough", async () => {
