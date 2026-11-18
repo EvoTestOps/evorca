@@ -191,7 +191,7 @@ const defaultTaskBudgetUsd = 2;
  * accuracy per scenario. Each scenario's run lands in
  * `<runsDir>/<scenario>/<run id>/`, and its `run.json` is rewritten after every
  * task. A resumed run runs only the tasks that have no outcome or the outcome
- * `budget-exhausted`.
+ * `budget-exhausted` or `stopped`.
  *
  * If the agent calls a model, it starts the model proxy and the relay first.
  * Once the run's model budget is spent, each task that has not started gets
@@ -206,8 +206,8 @@ const defaultTaskBudgetUsd = 2;
  *
  * On SIGINT or SIGTERM, it starts no more tasks and removes the run's
  * containers. It waits for the model requests in flight, so the run records
- * their cost, then removes the run's networks and exits with 130 or 143. The
- * run can resume.
+ * their cost, then records each running task as `stopped` with what it spent,
+ * removes the run's networks, and exits with 130 or 143. The run can resume.
  *
  * @throws Error if git, an image build, a container start, or the evaluator fails.
  */
@@ -470,8 +470,8 @@ export async function evaluateOpenRca(request: EvaluateRequest & Dirs): Promise<
 
 /**
  * Runs the tasks of one scenario that `tasksToRun` picks, rewrites `run.json`
- * after each, then scores the run. It returns the scores of the run's rows, or
- * undefined if the session's signal aborts.
+ * after each, then scores the run and sets `endedAt`. It returns the scores of
+ * the run's rows, or undefined if the session's signal aborts.
  */
 async function evaluateScenario(
   { scenario, tasks, selected, runDir, record }: ScenarioPlan,
@@ -501,21 +501,22 @@ async function evaluateScenario(
         if (signal.aborted) return undefined;
         throw error;
       });
-      if (taskRecord === undefined || signal.aborted) return;
+      if (taskRecord === undefined) return;
       records.set(task.row, taskRecord);
-      const { taskIndex, outcome, seconds, usage } = taskRecord;
-      const progress = `${records.size}/${selected.length} ${taskIndex}`;
-      const cost =
-        model === undefined || usage === null
-          ? ""
-          : `, $${usage.costUsd.toFixed(4)}, run $${model.proxy.usage().costUsd.toFixed(4)}`;
-      console.log(`${scenario} ${progress} ${outcome} ${seconds.toFixed(2)} s${cost}`);
+      if (!signal.aborted) {
+        const { taskIndex, outcome, seconds, usage } = taskRecord;
+        const progress = `${records.size}/${selected.length} ${taskIndex}`;
+        const cost =
+          model === undefined || usage === null
+            ? ""
+            : `, $${usage.costUsd.toFixed(4)}, run $${model.proxy.usage().costUsd.toFixed(4)}`;
+        console.log(`${scenario} ${progress} ${outcome} ${seconds.toFixed(2)} s${cost}`);
+      }
       await save(null);
     },
     signal,
   );
   if (signal.aborted) return undefined;
-  await save(new Date().toISOString());
 
   const diagnoses = new Map<number, Diagnosis>();
   for (const { row, outcome } of records.values()) {
@@ -531,6 +532,7 @@ async function evaluateScenario(
   ).filter((score) => rows.has(score.row));
   const summary = summarize(scores);
   await writeFile(join(runDir, "scores.json"), json({ summary, scores }));
+  await save(new Date().toISOString());
 
   const outcomes = Map.groupBy(records.values(), (task) => task.outcome);
   const counts = [...outcomes].map(([outcome, tasks]) => `${tasks.length} ${outcome}`);
@@ -548,7 +550,8 @@ async function evaluateScenario(
  * calls a model, the task gets a token and a network for the time it runs. Its
  * outcome is `budget-exhausted` if the run's budget is spent before it starts,
  * or if the run's budget denies one of its requests, because which running
- * tasks the run's budget cuts short depends on timing.
+ * tasks the run's budget cuts short depends on timing. Its outcome is
+ * `stopped`, with what it spent, if the session's signal aborts while it runs.
  *
  * @throws Error if the session's signal aborts before the container starts, or
  *   if the relay stopped while the task ran.
@@ -572,7 +575,7 @@ async function runTask(
   const container = { runId, name, image: agent.imageId, agent, taskDir, dataDir, scenario, seed };
   const logPath = join(taskDir, "log.txt");
   const started = performance.now();
-  let exit: Exit;
+  let exit: Exit | undefined;
   let usage: ModelUsage | null = null;
   let cutByRun = false;
   if (model === undefined) {
@@ -597,6 +600,8 @@ async function runTask(
       signal.throwIfAborted();
       exit = await runContainer({ ...container, model: access }, logPath);
       await relay.assertRunning();
+    } catch (error: unknown) {
+      if (!signal.aborted) throw error;
     } finally {
       usage = await proxy.closeTask(token);
       // The task's outcome is already known. A network that fails to close stays
@@ -606,6 +611,9 @@ async function runTask(
     cutByRun = usage.budgetExhausted && usage.costUsd < settings.taskBudgetUsd;
   }
   const seconds = Math.round(performance.now() - started) / 1000;
+  if (signal.aborted || exit === undefined) {
+    return { row, taskIndex, outcome: "stopped", exitCode: null, seconds, usage };
+  }
   const prediction = await readFile(join(taskDir, "out", "prediction.json"), "utf8").catch(
     () => undefined,
   );

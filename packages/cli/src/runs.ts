@@ -66,9 +66,8 @@ export type Versions = {
  * of the whole run over all its scenarios, are null unless the agent calls a
  * model. `jobs` and `budgetUsd` hold the values of the latest session.
  * `resumes` lists each later session of the run, and `endedAt` is null until
- * every task has an outcome. `abandoned` holds the usage of the tasks that a
- * stopped session left without an outcome, which ran again. `usage` adds up
- * the usage of the tasks and of `abandoned`.
+ * the run is scored. `abandoned` holds what each task that a resume ran again
+ * had spent before. `usage` adds up the usage of the tasks and of `abandoned`.
  */
 export type RunRecord = {
   readonly runId: string;
@@ -125,16 +124,18 @@ function differences(path: string, recorded: unknown, requested: unknown): strin
   return [`${path}: the run has ${JSON.stringify(recorded)}, not ${JSON.stringify(requested)}`];
 }
 
+const rerunOutcomes: ReadonlySet<Outcome> = new Set(["budget-exhausted", "stopped"]);
+
 /**
- * Returns the tasks of `tasks` that have no outcome in `records`, in the order
- * of `tasks`. A `budget-exhausted` task never started, so it runs again.
+ * Returns the tasks of `tasks` that have no outcome in `records`, or the
+ * outcome `budget-exhausted` or `stopped`, in the order of `tasks`.
  */
 export function tasksToRun<T extends { readonly row: number }>(
   tasks: readonly T[],
   records: readonly TaskRecord[],
 ): T[] {
   const done = new Set(
-    records.filter((record) => record.outcome !== "budget-exhausted").map((record) => record.row),
+    records.filter((record) => !rerunOutcomes.has(record.outcome)).map((record) => record.row),
   );
   return tasks.filter((task) => !done.has(task.row));
 }

@@ -275,7 +275,9 @@ export async function runContainer(container: TaskContainer, logPath: string): P
 /**
  * What became of one task. Only `answered` scores the agent's prediction. Every
  * other outcome scores the empty prediction `{}`. `budget-exhausted` marks a
- * task that never started, because the run's model budget was spent.
+ * task that the run's model budget kept from starting or cut short, and
+ * `stopped` a task that was running when the run stopped. A resume runs both
+ * again.
  */
 export type Outcome =
   | "answered"
@@ -283,7 +285,8 @@ export type Outcome =
   | "invalid-prediction"
   | "nonzero-exit"
   | "timeout"
-  | "budget-exhausted";
+  | "budget-exhausted"
+  | "stopped";
 
 /** Removes every container that carries the run's label, running or not. */
 export async function removeRunContainers(runId: string): Promise<void> {

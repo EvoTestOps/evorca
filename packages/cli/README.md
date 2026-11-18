@@ -190,13 +190,13 @@ Once the run's budget is spent, each task that has not started gets the outcome 
 
 ### Resume a run
 
-To stop a run, press ctrl+c. The command starts no more tasks and removes the run's containers. It waits for the model requests in flight, so the run records their cost. Then it removes the run's networks and prints the command that resumes the run. Press ctrl+c again to stop at once.
+To stop a run, press ctrl+c. The command starts no more tasks and removes the run's containers. It waits for the model requests in flight, so the run records their cost. It records each task that was running with the outcome `stopped` and what its `requests.jsonl` says it spent, so the totals in `run.json` match the request logs at once. Then it removes the run's networks and prints the command that resumes the run. Press ctrl+c again to stop at once.
 
 ```sh
 pnpm evorca evaluate --benchmark=openrca --resume=20261117T121537Z-random
 ```
 
-The resumed run skips each task that has an outcome in `run.json`, except `budget-exhausted`. It runs the other tasks again from the start, so it first deletes their folders. What a deleted task spent on the model stays in `run.json` under `abandoned` and counts toward the budget. The proxy records a request's cost when the response arrives. So a run that is killed, or stopped with a second ctrl+c, has no recorded cost for its requests in flight. The command removes containers and networks that a killed run left behind.
+The resumed run skips each task that has an outcome in `run.json`, except `budget-exhausted` and `stopped`. It runs the other tasks again from the start, so it first deletes their folders. What a deleted task spent on the model stays in `run.json` under `abandoned` and counts toward the budget. The proxy records a request's cost when the response arrives. So a run that is killed, or stopped with a second ctrl+c, has no recorded cost for its requests in flight. A killed run also records no `stopped` tasks, so its `run.json` lacks what its running tasks spent until the resume reads their `requests.jsonl`. The command removes containers and networks that a killed run left behind.
 
 It refuses to resume if the agent's folder, its entry in the `agents` table, `EVORCA_SEED`, `--rows`, or the model settings differ from the run's. The model settings are `--model`, `--effort`, `--task-budget-usd`, `EVORCA_UPSTREAM_URL`, and the price table. To finish a run that spent its budget, resume it with a larger `--budget-usd`.
 
@@ -230,7 +230,7 @@ The command writes `run.json` before the first task and again after each task. I
 - `pinnedInputs`: the OpenRCA commit, the Drive archives, and the SHA-256 of each answer key.
 - `startedAt`, in UTC.
 - `resumes`: the `startedAt`, `git`, and `versions` of each later session of the run.
-- `endedAt`, in UTC, or `null` while a task has no outcome.
+- `endedAt`, in UTC, or `null` until the run is scored.
 - `tasks`: the `row`, `taskIndex`, `outcome`, `exitCode`, `seconds`, and `usage` of each task, in row order.
 - `abandoned`: the `row` and `usage` of each task that a stopped session started and a resumed session deleted.
 - `usage`: the usage of the whole run, `abandoned` included.
@@ -277,6 +277,7 @@ Each task ends with one outcome. Only `answered` scores the agent's answer. Ever
 | `nonzero-exit`       | The container exits with another code.                                       |
 | `timeout`            | `evorca evaluate` kills the container at the agent's timeout.                |
 | `budget-exhausted`   | The run's model budget ran out before the task started or while it ran.      |
+| `stopped`            | ctrl+c or SIGTERM stopped the run while the task ran.                        |
 
 If Docker cannot start a container, `docker run` exits with code 125, and `evorca evaluate` stops and prints the container's log.
 
