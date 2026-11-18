@@ -14,7 +14,8 @@
  * `evorca evaluate` runs an agent from `agents/` on those scenarios, one Docker
  * container per task, scores its answers, and keeps each run in
  * `data/runs/<benchmark>/<scenario>/`. `evorca report` prints the summary of
- * finished runs from those folders.
+ * finished runs from those folders. `evorca watch` shows a run full screen
+ * while it runs, from its folder, and follows the newest run without a run ID.
  *
  * The command takes the real API key from `ANTHROPIC_API_KEY` and then deletes
  * the variable, so no Docker command, container, or evaluator that it starts
@@ -110,6 +111,21 @@ const commands = {
   async report({ benchmark, scenarios, runIds, runsDir }: Invocation) {
     if (!(await benchmark.report({ scenarios, runIds, runsDir }))) process.exitCode = 1;
   },
+  async watch({ scenarios, runIds: [runId], dataDir, runsDir }: Invocation) {
+    if (!process.stdin.isTTY || !process.stdout.isTTY) {
+      fail("evorca watch needs an interactive terminal.");
+    }
+    const { openWatch } = await import("./watch-view.js");
+    await openWatch({ runsDir, dataDir, scenarios, runId: () => runId });
+  },
+};
+
+const runIdCounts: Readonly<Record<keyof typeof commands, readonly [min: number, max: number]>> = {
+  fetch: [0, 0],
+  reproduce: [0, 0],
+  evaluate: [0, 0],
+  report: [1, Infinity],
+  watch: [0, 1],
 };
 
 const usage = [
@@ -122,6 +138,7 @@ const usage = [
   "       evorca evaluate --benchmark=<benchmark> --resume=<run id> [--scenario=<scenario>...]",
   "                [--jobs=<count>] [--budget-usd=<dollars>]",
   "       evorca report --benchmark=<benchmark> [--scenario=<scenario>...] <run id>...",
+  "       evorca watch --benchmark=<benchmark> [--scenario=<scenario>...] [<run id>]",
 ].join("\n");
 
 const { positionals, values } = parseCommandLine();
@@ -131,8 +148,10 @@ if (positionals.length === 0 && Object.keys(values).length === 0) {
   await openShell();
 } else {
   const [command, ...ids] = positionals;
-  if (!isKeyOf(commands, command) || (command === "report") !== ids.length > 0) fail(usage);
-  const runIds = ids.map((id) => parseRunId(id, "evorca report"));
+  if (!isKeyOf(commands, command)) fail(usage);
+  const [min, max] = runIdCounts[command];
+  if (ids.length < min || ids.length > max) fail(usage);
+  const runIds = ids.map((id) => parseRunId(id, `evorca ${command}`));
 
   const name = choose(benchmarks, values.benchmark, "benchmark");
   const benchmark = benchmarks[name];
