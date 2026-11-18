@@ -13,9 +13,10 @@
  * that copy on disk instead of downloading them.
  * `evorca evaluate` runs an agent from `agents/` on those scenarios, one Docker
  * container per task, scores its answers, and keeps each run in
- * `data/runs/<benchmark>/<scenario>/`. `evorca report` prints the summary of
- * finished runs from those folders. `evorca watch` shows a run full screen
- * while it runs, from its folder, and follows the newest run without a run ID.
+ * `data/runs/<benchmark>/<scenario>/`. On SIGINT or SIGTERM, it stops the run
+ * and exits with 130 or 143. `evorca report` prints the summary of finished
+ * runs from those folders. `evorca watch` shows a run full screen while it
+ * runs, from its folder, and follows the newest run without a run ID.
  *
  * The command takes the real API key from `ANTHROPIC_API_KEY` and then deletes
  * the variable, so no Docker command, container, or evaluator that it starts
@@ -106,7 +107,20 @@ const commands = {
       apiKey,
       upstreamUrl: readUpstreamUrl(),
     };
-    if (!(await benchmark.evaluate(options))) process.exitCode = 1;
+    const stop = new AbortController();
+    let stopSignal: NodeJS.Signals | undefined;
+    const onSignal = (signal: NodeJS.Signals) => {
+      stopSignal = signal;
+      console.error("\nStopping. Press ctrl+c again to stop at once.");
+      stop.abort();
+    };
+    process.once("SIGINT", onSignal).once("SIGTERM", onSignal);
+    const evaluation = benchmark.evaluate({ ...options, signal: stop.signal });
+    const ok = await evaluation.finally(() => {
+      process.off("SIGINT", onSignal).off("SIGTERM", onSignal);
+      if (stopSignal !== undefined) process.exit(stopSignal === "SIGINT" ? 130 : 143);
+    });
+    if (!ok) process.exitCode = 1;
   },
   async report({ benchmark, scenarios, runIds, runsDir }: Invocation) {
     if (!(await benchmark.report({ scenarios, runIds, runsDir }))) process.exitCode = 1;

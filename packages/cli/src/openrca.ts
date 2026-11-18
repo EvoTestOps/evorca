@@ -132,6 +132,7 @@ export async function reproduceOpenRca({
  * agent's `jobs`, every row, a random seed, `claude-sonnet-5` at the model's
  * default effort, a $50 run budget, and a $2 task budget. `apiKey` is the real
  * API key, and `upstreamUrl` is the API that the model proxy forwards to.
+ * `signal` stops the runs.
  */
 export type EvaluateRequest = {
   readonly scenarios: readonly OpenRcaScenario[];
@@ -147,6 +148,7 @@ export type EvaluateRequest = {
   readonly taskBudgetUsd: number | undefined;
   readonly apiKey: string | undefined;
   readonly upstreamUrl: string;
+  readonly signal: AbortSignal;
 };
 
 type Dirs = {
@@ -219,10 +221,12 @@ const defaultTaskBudgetUsd = 2;
  * if the relay cannot reach the proxy. It also returns false if the summary of
  * a series finds no finished run of a scenario. Otherwise it returns true.
  *
- * On SIGINT or SIGTERM, it starts no more tasks and removes the run's
+ * Once `signal` aborts, it starts no more tasks and removes the run's
  * containers. It waits for the model requests in flight, so the run records
  * their cost, then records each running task as `stopped` with what it spent,
- * removes the run's networks, and exits with 130 or 143. The run can resume.
+ * removes the run's networks, prints the command that resumes the run, and
+ * returns false. The run can resume. If `signal` aborts before a run writes
+ * its folder, the run does not start, and it returns false.
  *
  * @throws Error if git, an image build, a container start, or the evaluator fails.
  */
@@ -234,7 +238,9 @@ export async function evaluateOpenRca(request: EvaluateRequest & Dirs): Promise<
       : await readRuns(runsDir, request.resume, request.scenarios);
   const recorded = resumed?.values().next().value;
   const place = recorded?.series;
-  if (place === undefined && (request.runs ?? 1) === 1) return evaluateRun(request, undefined);
+  if (place === undefined && (request.runs ?? 1) === 1) {
+    return (await evaluateRun(request, undefined)) && !request.signal.aborted;
+  }
 
   const name = recorded?.agent.name ?? request.agent;
   if (name === undefined) throw new Error("evaluateOpenRca needs an agent or a run to resume.");
@@ -265,7 +271,7 @@ export async function evaluateOpenRca(request: EvaluateRequest & Dirs): Promise<
       const member = { runId, series: { id, run: index + 1, runs }, sameAs };
       const resume = existing.size > 0 ? runId : undefined;
       const run = { ...request, scenarios, seed: firstSeed + index, resume };
-      if (!(await evaluateRun(run, member))) return false;
+      if (!(await evaluateRun(run, member)) || request.signal.aborted) return false;
     }
     sameAs ??= (await readRuns(runsDir, runId, scenarios)).values().next().value;
   }
@@ -412,6 +418,7 @@ async function evaluateRun(
     console.log(`Warning: ${asked} need more than Docker's ${memoryMiB} MiB of memory.`);
   }
 
+  if (request.signal.aborted) return false;
   if (recorded !== undefined) await removeRun(runId);
   const startedAt = new Date().toISOString();
   const plans: ScenarioPlan[] = [];
@@ -476,20 +483,17 @@ async function evaluateRun(
     plans.push({ scenario, tasks: scenarioTasks, selected, runDir, record });
   }
 
-  const stop = new AbortController();
-  let stopSignal: NodeJS.Signals | undefined;
+  const { signal } = request;
   let sweeper: NodeJS.Timeout | undefined;
   let modelSession: ModelSession | undefined;
-  const onSignal = (signal: NodeJS.Signals) => {
-    stopSignal = signal;
-    stop.abort();
-    console.error("\nStopping. Press ctrl+c again to stop at once.");
+  const onStop = () => {
     // A task that was starting when the signal came may start its container after one sweep.
     const sweep = () => void removeRunContainers(runId).catch(() => {});
     sweep();
     sweeper = setInterval(sweep, 1000);
   };
-  process.once("SIGINT", onSignal).once("SIGTERM", onSignal);
+  if (signal.aborted) onStop();
+  else signal.addEventListener("abort", onStop, { once: true });
   try {
     if (model !== null && budgetUsd !== null && request.apiKey !== undefined) {
       const others = [...(runRecords?.values() ?? [])].filter(
@@ -511,8 +515,7 @@ async function evaluateRun(
         spent,
       });
       const relay = await startRelay(runId, proxy.port).catch((error: unknown) => {
-        if (!stop.signal.aborted)
-          console.error(error instanceof Error ? error.message : String(error));
+        if (!signal.aborted) console.error(error instanceof Error ? error.message : String(error));
         return undefined;
       });
       modelSession = relay === undefined ? undefined : { settings: model, budgetUsd, proxy, relay };
@@ -521,7 +524,7 @@ async function evaluateRun(
         return false;
       }
     }
-    const session: Session = { jobs, dataDir, cacheDir, signal: stop.signal, model: modelSession };
+    const session: Session = { jobs, dataDir, cacheDir, signal, model: modelSession };
     const scores: ScoredRow[] = [];
     for (const plan of plans) {
       const scenarioScores = await evaluateScenario(plan, session);
@@ -539,18 +542,17 @@ async function evaluateRun(
     }
     return true;
   } finally {
-    process.off("SIGINT", onSignal).off("SIGTERM", onSignal);
+    signal.removeEventListener("abort", onStop);
     clearInterval(sweeper);
     if (modelSession !== undefined) await modelSession.proxy.close();
     await removeRun(runId).catch((error: unknown) => {
       const reason = error instanceof Error ? error.message : String(error);
       console.error(`Could not remove the containers and networks of run ${runId}: ${reason}`);
     });
-    if (stopSignal !== undefined) {
+    if (signal.aborted) {
       const resume = `pnpm evorca evaluate --benchmark=openrca --resume=${runId}`;
       const what = series === undefined ? "Resume" : `Finish the ${series.runs} runs`;
       console.error(`Stopped. ${what} with: ${resume}`);
-      process.exit(stopSignal === "SIGINT" ? 130 : 143);
     }
   }
 }
