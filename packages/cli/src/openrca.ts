@@ -132,7 +132,8 @@ export async function reproduceOpenRca({
  * agent's `jobs`, every row, a random seed, `claude-sonnet-5` at the model's
  * default effort, a $50 run budget, and a $2 task budget. `apiKey` is the real
  * API key, and `upstreamUrl` is the API that the model proxy forwards to.
- * `signal` stops the runs.
+ * `signal` stops the runs, and `onRun` hears the ID of each run once its
+ * folder holds `run.json`.
  */
 export type EvaluateRequest = {
   readonly scenarios: readonly OpenRcaScenario[];
@@ -149,6 +150,7 @@ export type EvaluateRequest = {
   readonly apiKey: string | undefined;
   readonly upstreamUrl: string;
   readonly signal: AbortSignal;
+  readonly onRun?: (runId: string) => void;
 };
 
 type Dirs = {
@@ -483,6 +485,7 @@ async function evaluateRun(
     plans.push({ scenario, tasks: scenarioTasks, selected, runDir, record });
   }
 
+  request.onRun?.(runId);
   const { signal } = request;
   let sweeper: NodeJS.Timeout | undefined;
   let modelSession: ModelSession | undefined;

@@ -31,8 +31,9 @@ evorca reproduce --benchmark=<benchmark> [--scenario=<scenario>...] [--archive=<
 evorca evaluate --benchmark=<benchmark> --agent=<agent> [--scenario=<scenario>...]
                 [--runs=<count>] [--rows=<row>,...] [--jobs=<count>] [--model=<model>]
                 [--effort=<effort>] [--budget-usd=<dollars>] [--task-budget-usd=<dollars>]
+                [--plain]
 evorca evaluate --benchmark=<benchmark> --resume=<run ID> [--scenario=<scenario>...]
-                [--jobs=<count>] [--budget-usd=<dollars>]
+                [--jobs=<count>] [--budget-usd=<dollars>] [--plain]
 evorca report --benchmark=<benchmark> [--scenario=<scenario>...] <run ID>...
 evorca watch --benchmark=<benchmark> [--scenario=<scenario>...] [<run ID>]
 ```
@@ -161,6 +162,8 @@ A run with the same seed writes the same predictions, byte for byte, whatever it
 
 With `--jobs=4`, four containers run at once, and the lines come in the order that the tasks finish. If the agent's tasks together ask for more memory than Docker has, the command prints a warning before the first task. On Docker Desktop, set the memory under **Settings** > **Resources**.
 
+In a terminal, the command shows the run full screen in the view of [`evorca watch`](#watch-a-run), with the last four lines that it printed under the feed. When the run ends or stops, the view closes and the command prints every line as above, the accuracy among them, so the scrollback holds the same text either way. `--plain` prints the lines as the run goes instead, as for a run in the background. Without a terminal, as in CI or with output to a file, the command prints the lines.
+
 For a pilot, run a few rows with `--rows=0,7,21`. The command still writes a `predictions.csv` row for every task, because the evaluator matches predictions to tasks by position, and gives the other rows the empty prediction `{}`. The accuracy and `scores.json` cover only the rows of the run.
 
 ### Evaluate an agent that calls a model
@@ -199,7 +202,7 @@ Once the run's budget is spent, each task that has not started gets the outcome 
 
 ### Resume a run
 
-To stop a run, press ctrl+c. The command starts no more tasks and removes the run's containers. It waits for the model requests in flight, so the run records their cost. It records each task that was running with the outcome `stopped` and what its `requests.jsonl` says it spent, so the totals in `run.json` match the request logs at once. Then it removes the run's networks and prints the command that resumes the run. Press ctrl+c again to stop at once.
+To stop a run, press ctrl+c. The command starts no more tasks and removes the run's containers. It waits for the model requests in flight, so the run records their cost. It records each task that was running with the outcome `stopped` and what its `requests.jsonl` says it spent, so the totals in `run.json` match the request logs at once. Then it removes the run's networks and prints the command that resumes the run. Press ctrl+c again to stop at once. In the full-screen view, ctrl+c does the same: the first stops the run, and the view shows the stop until the run has stopped. The second closes the view and then stops at once.
 
 ```sh
 pnpm evorca evaluate --benchmark=openrca --resume=20261117T121537Z-random
