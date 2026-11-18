@@ -6,7 +6,7 @@ The `evorca` command. From the repository root, `pnpm evorca` runs it without a 
 
 - An interactive shell in the terminal, built with [OpenTUI](https://github.com/anomalyco/opentui), which `evorca` opens when it runs without arguments. It opens on a home screen with the evorca wordmark and an input line, then shows a transcript of the session above the input line. A footer shows the working directory and the version.
 - The slash commands `/help` and `/exit`.
-- `evorca fetch`, which downloads the answer keys and the telemetry of a benchmark's scenarios into `data/benchmarks/<benchmark>/<scenario>/` at the repository root.
+- `evorca fetch`, which downloads the answer keys and the telemetry of a benchmark's scenarios into `data/benchmarks/<benchmark>/<scenario>/` at the repository root, or reads them from dataset archives on disk.
 - `evorca reproduce`, which downloads only the answer keys and checks that evorca reproduces the scores that a benchmark publishes. It keeps the scorer's checkout and environment in `.cache/` at the repository root.
 - `evorca evaluate`, which runs an agent from `agents/` on a benchmark's scenarios, one Docker container per task and several tasks at a time, scores the answers, and keeps each run in `data/runs/<benchmark>/<scenario>/` at the repository root. A run that stops can resume from its last finished task. An agent that calls a model reaches the Anthropic API only through a proxy that holds the API key and the budgets.
 - One benchmark, `openrca`, through [`@evorca/openrca`](../openrca/README.md).
@@ -24,8 +24,8 @@ The package exports no modules. Its interface is the command:
 
 ```sh
 evorca
-evorca fetch --benchmark=<benchmark> [--scenario=<scenario>...]
-evorca reproduce --benchmark=<benchmark> [--scenario=<scenario>...]
+evorca fetch --benchmark=<benchmark> [--scenario=<scenario>...] [--archive=<path>...]
+evorca reproduce --benchmark=<benchmark> [--scenario=<scenario>...] [--archive=<path>...]
 evorca evaluate --benchmark=<benchmark> --agent=<agent> [--scenario=<scenario>...]
                 [--rows=<row>,...] [--jobs=<count>] [--model=<model>] [--effort=<effort>]
                 [--budget-usd=<dollars>] [--task-budget-usd=<dollars>]
@@ -37,6 +37,7 @@ evorca evaluate --benchmark=<benchmark> --resume=<run ID> [--scenario=<scenario>
 - `--benchmark` is required. The only benchmark is `openrca`.
 - `--scenario` names one scenario and can repeat. Without it, the command uses every scenario of the benchmark. The `openrca` scenarios are `bank`, `telecom`, `market-cloudbed-1`, and `market-cloudbed-2`.
 - `--agent` is required by `evorca evaluate`, unless it resumes a run. The agents are `random` and [`react`](../../agents/react/README.md).
+- `--archive` names a dataset archive on disk and can repeat. `evorca fetch` and `evorca reproduce` read the files of that archive from disk instead of downloading them, and check them in the same way. See [Fetch a scenario](#fetch-a-scenario).
 - `--rows` limits `evorca evaluate` to some rows of each scenario's `query.csv`, counted from 0, such as `--rows=0,7,21` for a pilot. Without it, the command runs every task.
 - `--jobs` sets how many tasks `evorca evaluate` runs at once. Without it, the command uses the `jobs` of the run it resumes, or else the agent's `jobs`.
 - `--model` and `--effort` set the model that the agent calls and its effort. The only model is `claude-sonnet-5`, and its default effort is `high`. The efforts are `low`, `medium`, `high`, `xhigh`, and `max`.
@@ -57,7 +58,7 @@ fetched  data/benchmarks/openrca/telecom/telemetry/2020_04_11/trace/trace_span.c
 
 `evorca reproduce` prints the same lines for the answer keys, then a report. It exits with code 1 if a score differs from the published score.
 
-Both commands exit with code 1 and list the valid choices if the command, the benchmark, or a scenario is unknown. They also exit with code 1, and print the reason, if a file on disk does not match its pinned hash, if the missing files need more than the free disk space, or if a download fails. The free-space message gives both sizes in GB.
+Both commands exit with code 1 and list the valid choices if the command, the benchmark, or a scenario is unknown. They also exit with code 1, and print the reason, if an `--archive` matches no archive of the benchmark, if a file on disk does not match its pinned hash, if the missing files need more than the free disk space, or if a download fails. The free-space message gives both sizes in GB. When Google Drive refuses a download because the file's quota is used up, the message names the archive, its link for a browser, and the command to run with `--archive` once you have downloaded it.
 
 `evorca evaluate` prints one line per task, then the outcomes and the accuracy of each scenario. It exits with code 1 and lists the agents if `--agent` is missing or unknown. Before it runs any task, it exits with code 1 if a model flag is given for an agent that calls no model, if an agent that calls a model has no API key, if a scenario's data is missing, with the `evorca fetch` command that downloads it, if a row in `--rows` does not exist, if Docker does not answer, if a container cannot reach the model proxy, or if the run to resume is missing or has other settings. It names each setting that differs.
 
@@ -85,6 +86,14 @@ pnpm evorca fetch --benchmark=openrca --scenario=bank
 ```
 
 The command writes the answer keys, `query.csv` and `record.csv`, to `data/benchmarks/openrca/bank/` and the telemetry to `data/benchmarks/openrca/bank/telemetry/`. The telemetry of `bank` is 26.40 GB, and the telemetry of all four scenarios is 68.65 GB. A file that is already present and matches its pinned hash stays as it is, so a second run downloads nothing. To fetch all four scenarios, leave out `--scenario`.
+
+Google Drive limits how often people can download a shared file. When Drive refuses a download, the command prints the archive to download in a browser and the command to run next. To read an archive that you downloaded, pass its path:
+
+```sh
+pnpm evorca fetch --benchmark=openrca --scenario=bank --archive=$HOME/Downloads/Bank.zip
+```
+
+The command needs no network then, and it checks each file as it does for a download. The [`@evorca/openrca` README](../openrca/README.md#download-an-archive-yourself) lists the archives, their sizes, and their links, and explains what to do when the browser also shows the "Quota exceeded" page.
 
 ## Reproduce the archive scores
 

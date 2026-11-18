@@ -7,7 +7,7 @@ OpenRCA benchmark support for evorca. It reads [OpenRCA](https://github.com/micr
 - Naming the four OpenRCA scenarios, `bank`, `telecom`, `market-cloudbed-1`, and `market-cloudbed-2`, after the Bank, Telecom, Market/cloudbed-1, and Market/cloudbed-2 systems, and reading the tasks in each scenario's `query.csv`.
 - Listing the root cause components and reasons that RCA-Agent's prompt offers for each scenario.
 - Converting a `Diagnosis` from `@evorca/core` to and from OpenRCA's prediction JSON. OpenRCA datetimes are wall-clock times at UTC+8.
-- Fetching each scenario's answer keys, `query.csv` and `record.csv`, and its telemetry, the logs, metrics, and traces, from the published dataset archives. Each file must match its size and SHA-256 in `src/pinned.ts` or `src/pinned-telemetry.json`.
+- Fetching each scenario's answer keys, `query.csv` and `record.csv`, and its telemetry, the logs, metrics, and traces, from the published dataset archives on Google Drive or from copies of them on disk. Each file must match its size and SHA-256 in `src/pinned.ts` or `src/pinned-telemetry.json`.
 - Scoring a prediction CSV with OpenRCA's own `main/evaluate.py` at a pinned commit, in the Python environment locked in `evaluator/uv.lock`.
 - Reproducing the scores in OpenRCA's archive of RCA-Agent predictions with that evaluator.
 
@@ -36,6 +36,8 @@ OpenRCA benchmark support for evorca. It reads [OpenRCA](https://github.com/micr
 
 - `fetchOpenRcaData({ scenarios, dataDir })` makes sure that the answer keys and the telemetry of each scenario exist in `<dataDir>/<scenario>/` and match their pinned size and SHA-256. It is an async generator that yields a `FileProgress` for each file: `present` for a file that is already there, `fetching` when a download starts, and `fetched` when the download matches and has its final name. Each `FileProgress` has the file's `path` and its pinned `bytes` and `sha256`. It throws before any download if a file on disk does not match, or if the missing files need more than the free space in `dataDir`.
 - `fetchOpenRcaData({ scenarios, dataDir, files: answerKeyFiles })` fetches only the answer keys, as `evorca reproduce` does. `answerKeyFiles` maps each answer key's path in the archives, such as `Telecom/query.csv`, to its pinned size and SHA-256.
+- `fetchOpenRcaData({ scenarios, dataDir, localArchives })` reads the archives at the paths in `localArchives` instead of their copies on Google Drive. The size of each file decides which archive it replaces, and each file read from it must match its pinned size and SHA-256. A path whose size matches no archive fails before any download, and the message lists the size of each archive.
+- When Google Drive answers a request with a web page instead of the archive's bytes, as it does once a file's download quota is used up, `fetchOpenRcaData` fails with a message that names the archive, its link for a browser, and the `pnpm evorca fetch` command that reads the archive from disk. See [Download an archive yourself](#download-an-archive-yourself).
 
 ### `@evorca/openrca/scoring`
 
@@ -106,7 +108,7 @@ OpenRCA publishes its dataset on Google Drive as three zip archives of about 3 G
 | market-cloudbed-2 |              16 |       12.66 GB | log, metric, trace |
 | All scenarios     |             162 |       68.65 GB |                    |
 
-You need network access to drive.usercontent.google.com. From the repository root, run:
+You need network access to drive.usercontent.google.com, unless you [download the archive yourself](#download-an-archive-yourself). From the repository root, run:
 
 ```sh
 pnpm evorca fetch --benchmark=openrca --scenario=telecom
@@ -117,6 +119,36 @@ The command writes the answer keys and the telemetry of `telecom` to `data/bench
 Before it downloads anything, the command checks the files that are present and compares the size of the missing files with the free space in `data/benchmarks/openrca/`. If a file on disk does not match, the command fails and names the file to delete. If the missing files do not fit, it fails and prints both sizes in GB. A file that is present and matches stays as it is, so a second run downloads nothing.
 
 The archives also hold `.DS_Store` files, which the command skips. `pnpm --filter @evorca/openrca pin-telemetry` runs the maintainer script `scripts/pin-telemetry.ts`, which reads every telemetry file in the archives once and writes its size and SHA-256 to `src/pinned-telemetry.json`. Like the other pins in `src/pinned.ts`, change that file only together with the expected results below.
+
+### Download an archive yourself
+
+Google Drive limits how often people can download a shared file. Once a file reaches the limit, Drive answers every request for it with a "Quota exceeded" page for up to 24 hours. The command then stops and names the archive to download in a browser:
+
+```text
+Google Drive refused the download (quota exceeded).
+Download Telecom.zip (3.07 GB) from https://drive.google.com/file/d/1cyOKpqyAP4fy-QiJ6a_cKuwR7D46zyVe/view yourself, then run:
+  pnpm evorca fetch --benchmark=openrca --scenario=telecom --archive=<path>
+```
+
+Each archive holds the files of these scenarios:
+
+| Archive     | Scenarios                            |             Size | Link                                                                     |
+| ----------- | ------------------------------------ | ---------------: | ------------------------------------------------------------------------ |
+| Bank.zip    | bank                                 | 2829139841 bytes | <https://drive.google.com/file/d/1enBrdPT3wLG94ITGbSOwUFg9fkLR-16R/view> |
+| Telecom.zip | telecom                              | 3071992930 bytes | <https://drive.google.com/file/d/1cyOKpqyAP4fy-QiJ6a_cKuwR7D46zyVe/view> |
+| Market.zip  | market-cloudbed-1, market-cloudbed-2 | 2865427796 bytes | <https://drive.google.com/file/d/1aDbqFHhYGgywLDfq54O7Ln8wgiv-BqGJ/view> |
+
+To fetch a scenario from an archive on disk:
+
+1. Open the archive's link in a browser and download the file.
+2. If the browser shows the same "Quota exceeded" page, download a copy from your own Drive, which has its own quota. Sign in to Google, open the link, and add the file to My Drive as a shortcut. In My Drive, right-click the shortcut, click **Make a copy**, and download the copy. You can delete the copy afterwards.
+3. Pass the path of the zip file to `--archive`:
+
+   ```sh
+   pnpm evorca fetch --benchmark=openrca --scenario=telecom --archive=$HOME/Downloads/Telecom.zip
+   ```
+
+The command reads the files out of the archive on disk and checks each file against its pinned size and SHA-256, as it does for a download from Drive. The size of the zip file tells the command which archive it is. If the size matches no archive, for example because the download stopped early, the command fails and lists the size of each archive. Pass the zip file as you downloaded it. Safari unpacks a zip file after the download unless you turn off **Open "safe" files after downloading** in its settings. Write `$HOME` instead of `~`, because the shell does not expand `~` after `=`. To pass more than one archive, repeat `--archive`.
 
 ## Score predictions
 

@@ -20,8 +20,12 @@ export const openRcaRepository = "https://github.com/microsoft/OpenRCA.git";
  */
 export const openRcaCommit = "2a481ae63cb045c3eadbeca9eddaa10ec1151979";
 
-/** A zip archive that a server offers for HTTP Range requests. `bytes` is its size. */
-export type Archive = {
+/**
+ * A zip archive on Google Drive. `driveId` names the file, `url` answers HTTP
+ * Range requests for its bytes, and `bytes` is its size.
+ */
+export type DriveArchive = {
+  readonly driveId: string;
   readonly url: string;
   readonly bytes: number;
 };
@@ -40,7 +44,7 @@ export const driveArchives = {
   Bank: onDrive("1enBrdPT3wLG94ITGbSOwUFg9fkLR-16R", 2829139841),
   Telecom: onDrive("1cyOKpqyAP4fy-QiJ6a_cKuwR7D46zyVe", 3071992930),
   Market: onDrive("1aDbqFHhYGgywLDfq54O7Ln8wgiv-BqGJ", 2865427796),
-} satisfies Record<string, Archive>;
+} satisfies Record<string, DriveArchive>;
 
 /** The name of the archive that holds each system's files. */
 export const archiveOf: Record<OpenRcaSystem, keyof typeof driveArchives> = {

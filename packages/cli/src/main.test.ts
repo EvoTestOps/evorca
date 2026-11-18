@@ -1,7 +1,10 @@
 import { execFile } from "node:child_process";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, onTestFinished } from "vitest";
 
 const packageDir = fileURLToPath(new URL("..", import.meta.url));
 
@@ -127,6 +130,28 @@ describe("evorca evaluate", () => {
 
     expect(code).toBe(1);
     expect(stderr).toContain("--resume takes a run ID");
+  });
+});
+
+describe("evorca fetch", () => {
+  it("exits with code 1 and lists the archives and their sizes for an --archive that is none of them", async () => {
+    const downloads = await mkdtemp(join(tmpdir(), "evorca-downloads-"));
+    onTestFinished(() => rm(downloads, { recursive: true }));
+    const archive = join(downloads, "Telecom.zip");
+    await writeFile(archive, "not the archive");
+
+    const { code, stderr } = await evorca(
+      "fetch",
+      "--benchmark=openrca",
+      "--scenario=telecom",
+      `--archive=${archive}`,
+    );
+
+    expect(code).toBe(1);
+    expect(stderr).toBe(
+      `${archive} has 15 bytes, but the OpenRCA archives are Bank.zip (2829139841 bytes), ` +
+        "Telecom.zip (3071992930 bytes), and Market.zip (2865427796 bytes)\n",
+    );
   });
 });
 

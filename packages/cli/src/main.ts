@@ -9,6 +9,8 @@
  * `evorca reproduce` downloads only the answer keys of those scenarios, checks
  * that evorca reproduces the scores that the benchmark publishes, and keeps the
  * scorer's checkout and environment in `.cache/` at the repository root.
+ * Both read the files of each dataset archive given as `--archive=<path>` from
+ * that copy on disk instead of downloading them.
  * `evorca evaluate` runs an agent from `agents/` on those scenarios, one Docker
  * container per task, scores its answers, and keeps each run in
  * `data/runs/<benchmark>/<scenario>/`.
@@ -57,11 +59,14 @@ type Invocation = {
 };
 
 const commands = {
-  async fetch({ benchmark, scenarios, dataDir }: Invocation) {
-    await printProgress(benchmark.fetch({ scenarios, dataDir }));
+  async fetch({ benchmark, scenarios, flags, dataDir }: Invocation) {
+    const localArchives = flags.archive ?? [];
+    await printProgress(benchmark.fetch({ scenarios, dataDir, localArchives }));
   },
-  async reproduce({ benchmark, scenarios, dataDir, cacheDir }: Invocation) {
-    await printProgress(benchmark.fetch({ scenarios, dataDir, files: benchmark.answerKeys }));
+  async reproduce({ benchmark, scenarios, flags, dataDir, cacheDir }: Invocation) {
+    const files = benchmark.answerKeys;
+    const localArchives = flags.archive ?? [];
+    await printProgress(benchmark.fetch({ scenarios, dataDir, files, localArchives }));
     if (!(await benchmark.reproduce({ scenarios, dataDir, cacheDir }))) process.exitCode = 1;
   },
   async evaluate({ benchmark, scenarios, flags, ...dirs }: Invocation) {
@@ -97,7 +102,8 @@ const commands = {
 
 const usage = [
   "Usage: evorca",
-  `       evorca <${Object.keys(commands).join("|")}> --benchmark=<benchmark> [--scenario=<scenario>...]`,
+  "       evorca <fetch|reproduce> --benchmark=<benchmark> [--scenario=<scenario>...]",
+  "                [--archive=<path>...]",
   "       evorca evaluate --benchmark=<benchmark> --agent=<agent> [--scenario=<scenario>...]",
   "                [--rows=<row>,...] [--jobs=<count>] [--model=<model>] [--effort=<effort>]",
   "                [--budget-usd=<dollars>] [--task-budget-usd=<dollars>]",
@@ -148,6 +154,7 @@ async function printProgress(progress: AsyncIterable<FileProgress>) {
 }
 
 type Flags = {
+  readonly archive?: readonly string[] | undefined;
   readonly agent?: string | undefined;
   readonly rows?: string | undefined;
   readonly jobs?: string | undefined;
@@ -166,6 +173,7 @@ function parseCommandLine() {
         benchmark: { type: "string" },
         scenario: { type: "string", multiple: true },
         agent: { type: "string" },
+        archive: { type: "string", multiple: true },
         rows: { type: "string" },
         jobs: { type: "string" },
         resume: { type: "string" },
