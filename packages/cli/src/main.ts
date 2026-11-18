@@ -71,6 +71,9 @@ const commands = {
   },
   async evaluate({ benchmark, scenarios, flags, ...dirs }: Invocation) {
     const resume = flags.resume === undefined ? undefined : parseRunId(flags.resume);
+    if (resume !== undefined && flags.runs !== undefined) {
+      fail("--runs starts new runs. A resumed run keeps the number of runs it started with.");
+    }
     const agent =
       flags.agent === undefined && resume !== undefined
         ? undefined
@@ -79,6 +82,7 @@ const commands = {
       ...dirs,
       scenarios,
       agent,
+      runs: flags.runs === undefined ? undefined : parseCount(flags.runs, "--runs"),
       resume,
       seed: readSeed(),
       rows: flags.rows === undefined ? undefined : parseRows(flags.rows),
@@ -105,8 +109,8 @@ const usage = [
   "       evorca <fetch|reproduce> --benchmark=<benchmark> [--scenario=<scenario>...]",
   "                [--archive=<path>...]",
   "       evorca evaluate --benchmark=<benchmark> --agent=<agent> [--scenario=<scenario>...]",
-  "                [--rows=<row>,...] [--jobs=<count>] [--model=<model>] [--effort=<effort>]",
-  "                [--budget-usd=<dollars>] [--task-budget-usd=<dollars>]",
+  "                [--runs=<count>] [--rows=<row>,...] [--jobs=<count>] [--model=<model>]",
+  "                [--effort=<effort>] [--budget-usd=<dollars>] [--task-budget-usd=<dollars>]",
   "       evorca evaluate --benchmark=<benchmark> --resume=<run id> [--scenario=<scenario>...]",
   "                [--jobs=<count>] [--budget-usd=<dollars>]",
 ].join("\n");
@@ -156,6 +160,7 @@ async function printProgress(progress: AsyncIterable<FileProgress>) {
 type Flags = {
   readonly archive?: readonly string[] | undefined;
   readonly agent?: string | undefined;
+  readonly runs?: string | undefined;
   readonly rows?: string | undefined;
   readonly jobs?: string | undefined;
   readonly resume?: string | undefined;
@@ -174,6 +179,7 @@ function parseCommandLine() {
         scenario: { type: "string", multiple: true },
         agent: { type: "string" },
         archive: { type: "string", multiple: true },
+        runs: { type: "string" },
         rows: { type: "string" },
         jobs: { type: "string" },
         resume: { type: "string" },
