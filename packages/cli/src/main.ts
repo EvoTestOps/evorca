@@ -38,7 +38,7 @@ import { agents } from "./agents.js";
 import { efforts, models } from "./models.js";
 import { evaluateOpenRca, reproduceOpenRca } from "./openrca.js";
 import { reportRuns } from "./report.js";
-import { isRunId } from "./runs.js";
+import { isRunId, parseRows } from "./runs.js";
 
 const apiKey = process.env.ANTHROPIC_API_KEY;
 delete process.env.ANTHROPIC_API_KEY;
@@ -87,6 +87,8 @@ const commands = {
       flags.agent === undefined && resume !== undefined
         ? undefined
         : choose(agents, flags.agent, "agent");
+    const rows = flags.rows === undefined ? undefined : parseRows(flags.rows, scenarios);
+    if (typeof rows === "string") fail(rows);
     const options = {
       ...dirs,
       scenarios,
@@ -94,7 +96,7 @@ const commands = {
       runs: flags.runs === undefined ? undefined : parseCount(flags.runs, "--runs"),
       resume,
       seed: readSeed(),
-      rows: flags.rows === undefined ? undefined : parseRows(flags.rows),
+      rows,
       jobs: flags.jobs === undefined ? undefined : parseCount(flags.jobs, "--jobs"),
       model: flags.model === undefined ? undefined : choose(models, flags.model, "model"),
       effort: flags.effort === undefined ? undefined : chooseEffort(flags.effort),
@@ -154,9 +156,9 @@ const usage = [
   "       evorca <fetch|reproduce> --benchmark=<benchmark> [--scenario=<scenario>...]",
   "                [--archive=<path>...]",
   "       evorca evaluate --benchmark=<benchmark> --agent=<agent> [--scenario=<scenario>...]",
-  "                [--runs=<count>] [--rows=<row>,...] [--jobs=<count>] [--model=<model>]",
-  "                [--effort=<effort>] [--budget-usd=<dollars>] [--task-budget-usd=<dollars>]",
-  "                [--plain]",
+  "                [--runs=<count>] [--rows=[<scenario>:]<row>,...] [--jobs=<count>]",
+  "                [--model=<model>] [--effort=<effort>] [--budget-usd=<dollars>]",
+  "                [--task-budget-usd=<dollars>] [--plain]",
   "       evorca evaluate --benchmark=<benchmark> --resume=<run id> [--scenario=<scenario>...]",
   "                [--jobs=<count>] [--budget-usd=<dollars>] [--plain]",
   "       evorca report --benchmark=<benchmark> [--scenario=<scenario>...] <run id>...",
@@ -213,7 +215,7 @@ type Flags = {
   readonly archive?: readonly string[] | undefined;
   readonly agent?: string | undefined;
   readonly runs?: string | undefined;
-  readonly rows?: string | undefined;
+  readonly rows?: readonly string[] | undefined;
   readonly jobs?: string | undefined;
   readonly resume?: string | undefined;
   readonly model?: string | undefined;
@@ -233,7 +235,7 @@ function parseCommandLine() {
         agent: { type: "string" },
         archive: { type: "string", multiple: true },
         runs: { type: "string" },
-        rows: { type: "string" },
+        rows: { type: "string", multiple: true },
         jobs: { type: "string" },
         resume: { type: "string" },
         model: { type: "string" },
@@ -255,13 +257,6 @@ function readSeed(): number | undefined {
     fail(`EVORCA_SEED must be a non-negative integer, not ${JSON.stringify(seed)}.`);
   }
   return Number(seed);
-}
-
-function parseRows(text: string): number[] {
-  if (!/^\d+(,\d+)*$/.test(text)) {
-    fail(`--rows must list row numbers, such as --rows=0,7,21, not ${JSON.stringify(text)}.`);
-  }
-  return [...new Set(text.split(",").map(Number))].sort((a, b) => a - b);
 }
 
 function parseCount(text: string, flag: string): number {

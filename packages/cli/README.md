@@ -29,9 +29,9 @@ evorca
 evorca fetch --benchmark=<benchmark> [--scenario=<scenario>...] [--archive=<path>...]
 evorca reproduce --benchmark=<benchmark> [--scenario=<scenario>...] [--archive=<path>...]
 evorca evaluate --benchmark=<benchmark> --agent=<agent> [--scenario=<scenario>...]
-                [--runs=<count>] [--rows=<row>,...] [--jobs=<count>] [--model=<model>]
-                [--effort=<effort>] [--budget-usd=<dollars>] [--task-budget-usd=<dollars>]
-                [--plain]
+                [--runs=<count>] [--rows=[<scenario>:]<row>,...] [--jobs=<count>]
+                [--model=<model>] [--effort=<effort>] [--budget-usd=<dollars>]
+                [--task-budget-usd=<dollars>] [--plain]
 evorca evaluate --benchmark=<benchmark> --resume=<run ID> [--scenario=<scenario>...]
                 [--jobs=<count>] [--budget-usd=<dollars>] [--plain]
 evorca report --benchmark=<benchmark> [--scenario=<scenario>...] <run ID>...
@@ -44,7 +44,7 @@ evorca watch --benchmark=<benchmark> [--scenario=<scenario>...] [<run ID>]
 - `--agent` is required by `evorca evaluate`, unless it resumes a run. The agents are `random` and [`react`](../../agents/react/README.md).
 - `--archive` names a dataset archive on disk and can repeat. `evorca fetch` and `evorca reproduce` read the files of that archive from disk instead of downloading them, and check them in the same way. See [Fetch a scenario](#fetch-a-scenario).
 - `--runs` sets how many complete runs `evorca evaluate` makes, one after another, with the same settings. Without it, the command makes one run. See [Repeat a run](#repeat-a-run).
-- `--rows` limits `evorca evaluate` to some rows of each scenario's `query.csv`, counted from 0, such as `--rows=0,7,21` for a pilot. Without it, the command runs every task.
+- `--rows` limits `evorca evaluate` to some rows of each scenario's `query.csv`, counted from 0, such as `--rows=0,7,21` for a pilot. Without it, the command runs every task. It can repeat, and a value that starts with a scenario, such as `--rows=bank:3,4`, gives the rows of that scenario only. So `--rows=0,7 --rows=bank:3,4` runs rows 0 and 7 of each scenario but `bank`, and rows 3 and 4 of `bank`.
 - `--jobs` sets how many tasks `evorca evaluate` runs at once. Without it, the command uses the `jobs` of the run it resumes, or else the agent's `jobs`.
 - `--model` and `--effort` set the model that the agent calls and its effort. The only model is `claude-sonnet-5`, and its default effort is `high`. The efforts are `low`, `medium`, `high`, `xhigh`, and `max`.
 - `--budget-usd` caps what the run spends on the model, in US dollars, and defaults to 50. `--task-budget-usd` caps what each task spends and defaults to 2.
@@ -68,7 +68,7 @@ fetched  data/benchmarks/openrca/telecom/telemetry/2020_04_11/trace/trace_span.c
 
 Both commands exit with code 1 and list the valid choices if the command, the benchmark, or a scenario is unknown. They also exit with code 1, and print the reason, if an `--archive` matches no archive of the benchmark, if a file on disk does not match its pinned hash, if the missing files need more than the free disk space, or if a download fails. The free-space message gives both sizes in GB. When Google Drive refuses a download because the file's quota is used up, the message names the archive, its link for a browser, and the command to run with `--archive` once you have downloaded it.
 
-`evorca evaluate` prints one line per task, then the outcomes and the accuracy of each scenario. It exits with code 1 and lists the agents if `--agent` is missing or unknown. Before it runs any task, it exits with code 1 if a model flag is given for an agent that calls no model, if an agent that calls a model has no API key, if a scenario's data is missing, with the `evorca fetch` command that downloads it, if a row in `--rows` does not exist, if Docker does not answer, if a container cannot reach the model proxy, or if the run to resume is missing or has other settings. It names each setting that differs. It exits with code 1 for `--runs` together with `--resume`, because a resumed series keeps its number of runs.
+`evorca evaluate` prints one line per task, then the outcomes and the accuracy of each scenario. It exits with code 1 and lists the agents if `--agent` is missing or unknown. Before it runs any task, it exits with code 1 if a model flag is given for an agent that calls no model, if an agent that calls a model has no API key, if a scenario's data is missing, with the `evorca fetch` command that downloads it, if a row in `--rows` does not exist, if a `--rows` value names a scenario that the run does not cover or gives rows that another value gives, if Docker does not answer, if a container cannot reach the model proxy, or if the run to resume is missing or has other settings. It names each setting that differs. It exits with code 1 for `--runs` together with `--resume`, because a resumed series keeps its number of runs.
 
 `evorca report` exits with code 1 if a run is missing, if two runs have other settings, or if no run of a scenario is finished. It names each setting that differs.
 
