@@ -103,6 +103,16 @@ export type RunRecord = {
   readonly usage: ModelUsage | null;
 };
 
+/** Whether `text` has the form of a run ID, such as `20261117T121537Z-random`. */
+export function isRunId(text: string): boolean {
+  return /^\d{8}T\d{6}Z-[a-z0-9-]+$/.test(text);
+}
+
+/** The folder of the task on row `row` in the folder of a run. */
+export function taskDirOf(runDir: string, row: number): string {
+  return join(runDir, "tasks", String(row).padStart(3, "0"));
+}
+
 /** The settings of a run that its results depend on. A resumed run keeps each of them. */
 export type Conditions = Pick<RunRecord, "agent" | "seed" | "rows" | "model">;
 

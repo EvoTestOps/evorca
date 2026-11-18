@@ -34,6 +34,7 @@ import { agents } from "./agents.js";
 import { efforts, models } from "./models.js";
 import { evaluateOpenRca, reproduceOpenRca } from "./openrca.js";
 import { reportRuns } from "./report.js";
+import { isRunId } from "./runs.js";
 
 const apiKey = process.env.ANTHROPIC_API_KEY;
 delete process.env.ANTHROPIC_API_KEY;
@@ -252,7 +253,7 @@ function readUpstreamUrl(): string {
 }
 
 function parseRunId(text: string, taker: string): string {
-  if (!/^\d{8}T\d{6}Z-[a-z0-9-]+$/.test(text)) {
+  if (!isRunId(text)) {
     fail(`${taker} takes a run ID, such as 20261117T121537Z-random, not ${JSON.stringify(text)}.`);
   }
   return text;
