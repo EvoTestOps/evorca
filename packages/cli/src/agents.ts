@@ -2,9 +2,10 @@
  * The agents that `evorca evaluate` runs, and the Docker container that runs
  * one OpenRCA task of an agent. The container reads the task at `/task.json`
  * and writes its answer, OpenRCA prediction JSON, to `/out/prediction.json`.
- * It has no network and a read-only root file system. It sees the scenario's
- * telemetry at `/data` only if its agent needs telemetry, and it never sees
- * `query.csv` or `record.csv`, which hold the answers.
+ * It has a read-only root file system and no network, except a network to the
+ * model proxy if its agent calls a model. It sees the scenario's telemetry at
+ * `/data` only if its agent needs telemetry, and it never sees `query.csv` or
+ * `record.csv`, which hold the answers.
  *
  * @module
  */
@@ -19,20 +20,56 @@ import { parsePrediction, type OpenRcaScenario } from "@evorca/openrca";
 const run = promisify(execFile);
 const containerUser = "65534:65534";
 
+/** The Docker label that holds the run ID on every container that a run starts. */
+export const runLabel = "evorca.run";
+
+/**
+ * The limits of one task's container: its memory and its `/tmp` folder in MiB,
+ * its CPUs, and its processes. `/tmp` lives in memory and counts toward
+ * `memoryMiB`.
+ */
+export type Resources = {
+  readonly memoryMiB: number;
+  readonly tmpMiB: number;
+  readonly cpus: number;
+  readonly pids: number;
+};
+
 /**
  * How `evorca evaluate` runs an agent. `seesCandidates` adds the scenario's
  * candidate components and reasons to `/task.json`. `needsTelemetry` mounts the
- * scenario's telemetry at `/data`. `timeoutSeconds` bounds each task.
+ * scenario's telemetry at `/data`. `needsModel` lets the container call a
+ * model through the model proxy. `timeoutSeconds` bounds each task, and
+ * `resources` limits its container. `jobs` is how many tasks run at once by
+ * default.
  */
 export type Agent = {
   readonly seesCandidates: boolean;
   readonly needsTelemetry: boolean;
+  readonly needsModel: boolean;
   readonly timeoutSeconds: number;
+  readonly resources: Resources;
+  readonly jobs: number;
 };
 
 /** The agents by name. Each agent's image builds from `agents/<name>/` at the repository root. */
 export const agents = {
-  random: { seesCandidates: true, needsTelemetry: false, timeoutSeconds: 60 },
+  random: {
+    seesCandidates: true,
+    needsTelemetry: false,
+    needsModel: false,
+    timeoutSeconds: 60,
+    resources: { memoryMiB: 1024, tmpMiB: 64, cpus: 1, pids: 128 },
+    jobs: 1,
+  },
+  react: {
+    seesCandidates: true,
+    needsTelemetry: true,
+    needsModel: true,
+    timeoutSeconds: 3600,
+    resources: { memoryMiB: 3072, tmpMiB: 1024, cpus: 2, pids: 256 },
+    jobs: 2,
+  },
 } satisfies Record<string, Agent>;
 
 /** The name of an agent, such as `random`. */
@@ -88,29 +125,76 @@ export async function dockerVersions(): Promise<
 }
 
 /**
- * One task's container. `image` is an image ID, and `taskDir` holds the task's
- * `task.json`. `runContainer` creates the task's `out/` folder in `taskDir`.
+ * Returns the memory of the Docker daemon's machine in MiB, which on Docker
+ * Desktop is the memory of its virtual machine.
+ *
+ * @throws Error if the daemon does not answer.
+ */
+export async function dockerMemoryMiB(): Promise<number> {
+  const info = await run("docker", ["info", "--format", "{{.MemTotal}}"]);
+  return Math.floor(Number(info.stdout.trim()) / 2 ** 20);
+}
+
+/**
+ * How a task's container calls the model: its task network, the proxy's URL,
+ * the task's token, the model and effort of the run, and the task's budget.
+ */
+export type ModelAccess = {
+  readonly network: string;
+  readonly baseUrl: string;
+  readonly token: string;
+  readonly model: string;
+  readonly effort: string;
+  readonly taskBudgetUsd: number;
+};
+
+/**
+ * One task's container. `runId` labels it, `image` is an image ID, and
+ * `taskDir` holds the task's `task.json`. `model` is undefined unless the agent
+ * calls a model. `runContainer` creates the task's `out/` folder in `taskDir`.
  */
 export type TaskContainer = {
+  readonly runId: string;
   readonly name: string;
   readonly image: string;
-  readonly agent: Agent;
+  readonly agent: Pick<Agent, "needsTelemetry" | "timeoutSeconds" | "resources">;
   readonly taskDir: string;
   readonly dataDir: string;
   readonly scenario: OpenRcaScenario;
   readonly seed: number;
+  readonly model: ModelAccess | undefined;
 };
 
 /**
  * Returns the arguments of `docker run` for one task. The container runs as an
- * unprivileged user with no network, no capabilities, a read-only root file
- * system, and limits on memory, CPU, and processes. It gets `task.json` at
+ * unprivileged user with no capabilities, a read-only root file system, and the
+ * agent's limits on memory, `/tmp`, CPU, and processes. It gets `task.json` at
  * `/task.json`, read-only, and `out/` at `/out`, writable. If the agent needs
  * telemetry, it gets `<dataDir>/<scenario>/telemetry/` at `/data`, read-only.
- * The seed is in `EVORCA_SEED`.
+ * The seed is in `EVORCA_SEED`, the agent's timeout in
+ * `EVORCA_TASK_TIMEOUT_SECONDS`, and the `evorca.run` label holds the run ID.
+ *
+ * Without `model`, the container has no network. With `model`, it joins the
+ * task's network, and its environment holds the proxy's URL in
+ * `ANTHROPIC_BASE_URL`, the task's token in `ANTHROPIC_API_KEY`, and the run's
+ * `EVORCA_MODEL`, `EVORCA_EFFORT`, and `EVORCA_TASK_BUDGET_USD`.
  */
 export function dockerRunArgs(container: TaskContainer): string[] {
-  const { name, image, agent, taskDir, dataDir, scenario, seed } = container;
+  const { runId, name, image, agent, taskDir, dataDir, scenario, seed, model } = container;
+  const { memoryMiB, tmpMiB, cpus, pids } = agent.resources;
+  const env = [
+    `EVORCA_SEED=${seed}`,
+    `EVORCA_TASK_TIMEOUT_SECONDS=${agent.timeoutSeconds}`,
+    ...(model === undefined
+      ? []
+      : [
+          `ANTHROPIC_BASE_URL=${model.baseUrl}`,
+          `ANTHROPIC_API_KEY=${model.token}`,
+          `EVORCA_MODEL=${model.model}`,
+          `EVORCA_EFFORT=${model.effort}`,
+          `EVORCA_TASK_BUDGET_USD=${model.taskBudgetUsd}`,
+        ]),
+  ];
   const telemetry = agent.needsTelemetry
     ? ["--mount", `type=bind,src=${join(dataDir, scenario, "telemetry")},dst=/data,readonly`]
     : [];
@@ -120,11 +204,13 @@ export function dockerRunArgs(container: TaskContainer): string[] {
     "--init",
     "--name",
     name,
+    "--label",
+    `${runLabel}=${runId}`,
     "--network",
-    "none",
+    model?.network ?? "none",
     "--read-only",
     "--tmpfs",
-    "/tmp:rw,noexec,nosuid,size=64m",
+    `/tmp:rw,noexec,nosuid,size=${tmpMiB}m`,
     "--cap-drop",
     "ALL",
     "--security-opt",
@@ -132,18 +218,17 @@ export function dockerRunArgs(container: TaskContainer): string[] {
     "--user",
     containerUser,
     "--memory",
-    "1g",
+    `${memoryMiB}m`,
     "--cpus",
-    "1",
+    String(cpus),
     "--pids-limit",
-    "128",
+    String(pids),
     "--mount",
     `type=bind,src=${join(taskDir, "task.json")},dst=/task.json,readonly`,
     "--mount",
     `type=bind,src=${join(taskDir, "out")},dst=/out`,
     ...telemetry,
-    "--env",
-    `EVORCA_SEED=${seed}`,
+    ...env.flatMap((variable) => ["--env", variable]),
     image,
   ];
 }
@@ -169,7 +254,11 @@ export async function runContainer(container: TaskContainer, logPath: string): P
   // The container's user does not own the folder on the host.
   await chmod(outDir, 0o777);
   await using log = await open(logPath, "w");
-  const child = spawn("docker", dockerRunArgs(container), { stdio: ["ignore", log.fd, log.fd] });
+  // Detached, so a ctrl+c in the terminal reaches evorca alone, which then removes the containers.
+  const child = spawn("docker", dockerRunArgs(container), {
+    stdio: ["ignore", log.fd, log.fd],
+    detached: true,
+  });
   let timedOut = false;
   const timer = setTimeout(() => {
     timedOut = true;
@@ -185,10 +274,24 @@ export async function runContainer(container: TaskContainer, logPath: string): P
 
 /**
  * What became of one task. Only `answered` scores the agent's prediction. Every
- * other outcome scores the empty prediction `{}`.
+ * other outcome scores the empty prediction `{}`. `budget-exhausted` marks a
+ * task that never started, because the run's model budget was spent.
  */
 export type Outcome =
-  "answered" | "no-prediction" | "invalid-prediction" | "nonzero-exit" | "timeout";
+  | "answered"
+  | "no-prediction"
+  | "invalid-prediction"
+  | "nonzero-exit"
+  | "timeout"
+  | "budget-exhausted";
+
+/** Removes every container that carries the run's label, running or not. */
+export async function removeRunContainers(runId: string): Promise<void> {
+  const filter = `label=${runLabel}=${runId}`;
+  const listed = await run("docker", ["ps", "--all", "--quiet", "--filter", filter]);
+  const ids = listed.stdout.split("\n").filter((id) => id !== "");
+  if (ids.length > 0) await run("docker", ["rm", "--force", ...ids]);
+}
 
 /**
  * Returns a task's outcome and the diagnosis to score, from how its container
