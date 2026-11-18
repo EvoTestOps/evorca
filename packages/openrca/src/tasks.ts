@@ -22,6 +22,23 @@ const taskIndices = ["task_1", "task_2", "task_3", "task_4", "task_5", "task_6",
 export type TaskIndex = (typeof taskIndices)[number];
 
 /**
+ * An OpenRCA difficulty. As in `main/evaluate.py`, `task_1` to `task_3` are easy,
+ * `task_4` to `task_6` are middle, and `task_7` is hard.
+ */
+export type Difficulty = "easy" | "middle" | "hard";
+
+/** The difficulty of each task index. */
+export const difficultyOf: Readonly<Record<TaskIndex, Difficulty>> = {
+  task_1: "easy",
+  task_2: "easy",
+  task_3: "easy",
+  task_4: "middle",
+  task_5: "middle",
+  task_6: "middle",
+  task_7: "hard",
+};
+
+/**
  * One OpenRCA task, without its scoring points. `row` is the zero-based row of
  * the task in `query.csv`, and a prediction file answers the task on the same
  * row. `instruction` tells the agent the time range and the number of failures.

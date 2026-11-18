@@ -4,14 +4,8 @@
  *
  * @module
  */
-import type { TaskIndex } from "../tasks.js";
+import { difficultyOf, type Difficulty } from "../tasks.js";
 import type { ScoredRow } from "./evaluator.js";
-
-/**
- * An OpenRCA difficulty. As in `main/evaluate.py`, `task_1` to `task_3` are easy,
- * `task_4` to `task_6` are middle, and `task_7` is hard.
- */
-export type Difficulty = "easy" | "middle" | "hard";
 
 /**
  * The accuracy over a set of tasks. `strict` is the share of tasks with a score
@@ -26,19 +20,9 @@ export type Accuracy = {
 /** The accuracy per difficulty and over all tasks, in the key order easy, middle, hard, total. */
 export type Summary = Readonly<Record<Difficulty | "total", Accuracy>>;
 
-const difficulty: Record<TaskIndex, Difficulty> = {
-  task_1: "easy",
-  task_2: "easy",
-  task_3: "easy",
-  task_4: "middle",
-  task_5: "middle",
-  task_6: "middle",
-  task_7: "hard",
-};
-
 /** Computes the accuracy per difficulty and over all rows, which may come in any order. */
 export function summarize(rows: readonly ScoredRow[]): Summary {
-  const byLevel = Object.groupBy(rows, (row) => difficulty[row.taskIndex]);
+  const byLevel = Object.groupBy(rows, (row) => difficultyOf[row.taskIndex]);
   return {
     easy: accuracy(byLevel.easy ?? []),
     middle: accuracy(byLevel.middle ?? []),
