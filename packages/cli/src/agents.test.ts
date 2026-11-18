@@ -1,5 +1,12 @@
-import { describe, expect, it } from "vitest";
-import { agents, dockerRunArgs, outcomeOf, type Exit, type TaskContainer } from "./agents.js";
+import { afterEach, describe, expect, it } from "vitest";
+import {
+  agents,
+  dockerRunArgs,
+  outcomeOf,
+  type Exit,
+  type ModelAccess,
+  type TaskContainer,
+} from "./agents.js";
 
 const dataDir = "/repo/data/benchmarks/openrca";
 const taskDir = "/repo/data/runs/openrca/telecom/20261117T120000Z-random/tasks/007";
@@ -12,6 +19,15 @@ const container: TaskContainer = {
   dataDir,
   scenario: "telecom",
   seed: 42,
+  model: undefined,
+};
+const model: ModelAccess = {
+  network: "evorca-20261117T120000Z-react-telecom-7",
+  baseUrl: "http://evorca-proxy:8080",
+  token: "evorca-task-token",
+  model: "claude-sonnet-5",
+  effort: "high",
+  taskBudgetUsd: 2,
 };
 
 function valuesOf(args: readonly string[], flag: string): string[] {
@@ -70,6 +86,42 @@ describe("dockerRunArgs", () => {
     const sources = mounts.map((mount) => /src=([^,]*)/.exec(mount)?.[1]);
     expect(sources).not.toContain(`${dataDir}/telecom`);
     expect(sources).not.toContain(dataDir);
+  });
+
+  describe("with model access", () => {
+    const realKey = process.env.ANTHROPIC_API_KEY;
+    afterEach(() => {
+      if (realKey === undefined) delete process.env.ANTHROPIC_API_KEY;
+      else process.env.ANTHROPIC_API_KEY = realKey;
+    });
+
+    it("joins the task's network and gets the proxy, the token, and the run's model", () => {
+      const args = dockerRunArgs({ ...container, model });
+
+      expect(valuesOf(args, "--network")).toEqual(["evorca-20261117T120000Z-react-telecom-7"]);
+      expect(valuesOf(args, "--env")).toEqual([
+        "EVORCA_SEED=42",
+        "ANTHROPIC_BASE_URL=http://evorca-proxy:8080",
+        "ANTHROPIC_API_KEY=evorca-task-token",
+        "EVORCA_MODEL=claude-sonnet-5",
+        "EVORCA_EFFORT=high",
+        "EVORCA_TASK_BUDGET_USD=2",
+      ]);
+      expect(args).toContain("--read-only");
+      expect(valuesOf(args, "--cap-drop")).toEqual(["ALL"]);
+      expect(valuesOf(args, "--user")).toEqual(["65534:65534"]);
+    });
+
+    it("never passes the real API key, not even by name", () => {
+      process.env.ANTHROPIC_API_KEY = "sk-ant-real-key-sentinel";
+      const args = dockerRunArgs({ ...container, model });
+
+      expect(args.join(" ")).not.toContain("sk-ant-real-key-sentinel");
+      expect(args).not.toContain("ANTHROPIC_API_KEY");
+      expect(args.filter((arg) => arg.startsWith("ANTHROPIC_API_KEY="))).toEqual([
+        "ANTHROPIC_API_KEY=evorca-task-token",
+      ]);
+    });
   });
 });
 

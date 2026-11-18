@@ -8,7 +8,7 @@ The `evorca` command. From the repository root, `pnpm evorca` runs it without a 
 - The slash commands `/help` and `/exit`.
 - `evorca fetch`, which downloads the answer keys and the telemetry of a benchmark's scenarios into `data/benchmarks/<benchmark>/<scenario>/` at the repository root.
 - `evorca reproduce`, which downloads only the answer keys and checks that evorca reproduces the scores that a benchmark publishes. It keeps the scorer's checkout and environment in `.cache/` at the repository root.
-- `evorca evaluate`, which runs an agent from `agents/` on a benchmark's scenarios, one Docker container per task and several tasks at a time, scores the answers, and keeps each run in `data/runs/<benchmark>/<scenario>/` at the repository root. A run that stops can resume from its last finished task.
+- `evorca evaluate`, which runs an agent from `agents/` on a benchmark's scenarios, one Docker container per task and several tasks at a time, scores the answers, and keeps each run in `data/runs/<benchmark>/<scenario>/` at the repository root. A run that stops can resume from its last finished task. An agent that calls a model reaches the Anthropic API only through a proxy that holds the API key and the budgets.
 - One benchmark, `openrca`, through [`@evorca/openrca`](../openrca/README.md).
 
 ## Non-goals
@@ -27,9 +27,10 @@ evorca
 evorca fetch --benchmark=<benchmark> [--scenario=<scenario>...]
 evorca reproduce --benchmark=<benchmark> [--scenario=<scenario>...]
 evorca evaluate --benchmark=<benchmark> --agent=<agent> [--scenario=<scenario>...]
-                [--rows=<row>,...] [--jobs=<count>]
+                [--rows=<row>,...] [--jobs=<count>] [--model=<model>] [--effort=<effort>]
+                [--budget-usd=<dollars>] [--task-budget-usd=<dollars>]
 evorca evaluate --benchmark=<benchmark> --resume=<run ID> [--scenario=<scenario>...]
-                [--jobs=<count>]
+                [--jobs=<count>] [--budget-usd=<dollars>]
 ```
 
 - Without arguments, `evorca` opens the [interactive shell](#use-the-shell).
@@ -37,9 +38,14 @@ evorca evaluate --benchmark=<benchmark> --resume=<run ID> [--scenario=<scenario>
 - `--scenario` names one scenario and can repeat. Without it, the command uses every scenario of the benchmark. The `openrca` scenarios are `bank`, `telecom`, `market-cloudbed-1`, and `market-cloudbed-2`.
 - `--agent` is required by `evorca evaluate`, unless it resumes a run. The only agent is `random`.
 - `--rows` limits `evorca evaluate` to some rows of each scenario's `query.csv`, counted from 0, such as `--rows=0,7,21` for a pilot. Without it, the command runs every task.
-- `--jobs` sets how many tasks `evorca evaluate` runs at once. Without it, the command uses the agent's `jobs`.
-- `--resume` continues the run with that ID. The run keeps its agent, seed, and rows, and `--jobs` can change. With `--scenario`, the command resumes only those scenarios of the run.
+- `--jobs` sets how many tasks `evorca evaluate` runs at once. Without it, the command uses the `jobs` of the run it resumes, or else the agent's `jobs`.
+- `--model` and `--effort` set the model that the agent calls and its effort. The only model is `claude-sonnet-5`, and its default effort is `high`. The efforts are `low`, `medium`, `high`, `xhigh`, and `max`.
+- `--budget-usd` caps what the run spends on the model, in US dollars, and defaults to 50. `--task-budget-usd` caps what each task spends and defaults to 2.
+- The four model flags apply only to an agent that calls a model.
+- `--resume` continues the run with that ID. The run keeps its agent, seed, rows, and model settings. `--jobs` and `--budget-usd` can change. With `--scenario`, the command resumes only those scenarios of the run.
 - `EVORCA_SEED`, a non-negative integer in the environment, sets the seed of `evorca evaluate`. Without it, the command picks a seed and prints it, or uses the seed of the run it resumes.
+- `ANTHROPIC_API_KEY` in the environment is the API key for an agent that calls a model. `pnpm evorca` reads it from `.env` at the repository root if the file exists. The command removes it from its environment before it starts any process.
+- `EVORCA_UPSTREAM_URL` replaces `https://api.anthropic.com` as the API that the model proxy calls, such as with a mock in a test.
 
 `evorca fetch` prints one line for each file that is already present, and two lines for each file that it downloads: one when the download starts and one when it is done. A line has the status, the path, and the size in bytes. A `present` or `fetched` line also has the SHA-256:
 
@@ -53,7 +59,7 @@ fetched  data/benchmarks/openrca/telecom/telemetry/2020_04_11/trace/trace_span.c
 
 Both commands exit with code 1 and list the valid choices if the command, the benchmark, or a scenario is unknown. They also exit with code 1, and print the reason, if a file on disk does not match its pinned hash, if the missing files need more than the free disk space, or if a download fails. The free-space message gives both sizes in GB.
 
-`evorca evaluate` prints one line per task, then the outcomes and the accuracy of each scenario. It exits with code 1 and lists the agents if `--agent` is missing or unknown. Before it runs any task, it exits with code 1 if a scenario's data is missing, with the `evorca fetch` command that downloads it, if a row in `--rows` does not exist, if Docker does not answer, or if the run to resume is missing or has other settings. It names each setting that differs.
+`evorca evaluate` prints one line per task, then the outcomes and the accuracy of each scenario. It exits with code 1 and lists the agents if `--agent` is missing or unknown. Before it runs any task, it exits with code 1 if a model flag is given for an agent that calls no model, if an agent that calls a model has no API key, if a scenario's data is missing, with the `evorca fetch` command that downloads it, if a row in `--rows` does not exist, if Docker does not answer, if a container cannot reach the model proxy, or if the run to resume is missing or has other settings. It names each setting that differs.
 
 ## Use the shell
 
@@ -139,15 +145,51 @@ With `--jobs=4`, four containers run at once, and the lines come in the order th
 
 For a pilot, run a few rows with `--rows=0,7,21`. The command still writes a `predictions.csv` row for every task, because the evaluator matches predictions to tasks by position, and gives the other rows the empty prediction `{}`. The accuracy and `scores.json` cover only the rows of the run.
 
+### Evaluate an agent that calls a model
+
+An agent with `needsModel` calls Claude through the [model proxy](#reach-the-model). Put the API key in `.env` at the repository root. Git ignores the file.
+
+```sh
+ANTHROPIC_API_KEY=<key>
+```
+
+Then run a pilot with a small budget:
+
+```sh
+pnpm evorca evaluate --benchmark=openrca --scenario=telecom --agent=<agent> --rows=0,7,21 --budget-usd=5
+```
+
+The command prints the model, the effort, and the budgets. Each task line adds what the task spent and what the run has spent so far. The last line gives the run's total:
+
+```text
+Model claude-sonnet-5, effort high, $5 for the run, $2 per task, via https://api.anthropic.com
+Run 20261117T121537Z-<agent>, 2 tasks at a time.
+
+telecom: 3 tasks, run folder data/runs/openrca/telecom/20261117T121537Z-<agent>
+telecom 1/3 task_1 answered 84.12 s, $0.4120, run $0.4120
+
+The run has spent $1.2345 of the $5 budget on 57 model requests.
+```
+
+The proxy prices each response from its `usage`, with the price table in `src/models.ts`. The table records its source and the date it was checked. Cache writes of five minutes and of one hour have their own prices.
+
+The proxy checks both budgets before it forwards a request. Once the task has spent `--task-budget-usd`, or the run has spent `--budget-usd`, the proxy answers each request of the task with HTTP 403 and the error type `evorca_budget_exhausted`. The agent should then write its best answer. The run's budget covers every scenario of the run, even on a resume of only some of them.
+
+The proxy forwards a task's requests one at a time, so each check counts the cost of every earlier response. The cost of a response is known only after it arrives, so a task can pass its budget by one request, and the run by one request per running task.
+
+Once the run's budget is spent, each task that has not started gets the outcome `budget-exhausted`. So does a running task that the run's budget denies a request. Which running tasks the run's budget cuts short depends on timing, so their answers are not scored. A resume with a larger `--budget-usd` runs them again. A task that spends its own `--task-budget-usd` keeps its answer, because that budget is the same for every task.
+
 ### Resume a run
 
-To stop a run, press ctrl+c. The command removes the run's containers and prints the command that resumes the run:
+To stop a run, press ctrl+c. The command starts no more tasks and removes the run's containers. It waits for the model requests in flight, so the run records their cost. Then it removes the run's networks and prints the command that resumes the run. Press ctrl+c again to stop at once.
 
 ```sh
 pnpm evorca evaluate --benchmark=openrca --resume=20261117T121537Z-random
 ```
 
-The resumed run skips each task that has an outcome in `run.json`. It runs the other tasks again from the start, so it first deletes their folders. It removes containers that a killed run left behind. It refuses to resume if the agent's folder, its entry in the `agents` table, `EVORCA_SEED`, or `--rows` differ from the run's.
+The resumed run skips each task that has an outcome in `run.json`, except `budget-exhausted`. It runs the other tasks again from the start, so it first deletes their folders. What a deleted task spent on the model stays in `run.json` under `abandoned` and counts toward the budget. The proxy records a request's cost when the response arrives. So a run that is killed, or stopped with a second ctrl+c, has no recorded cost for its requests in flight. The command removes containers and networks that a killed run left behind.
+
+It refuses to resume if the agent's folder, its entry in the `agents` table, `EVORCA_SEED`, `--rows`, or the model settings differ from the run's. The model settings are `--model`, `--effort`, `--task-budget-usd`, `EVORCA_UPSTREAM_URL`, and the price table. To finish a run that spent its budget, resume it with a larger `--budget-usd`.
 
 ### Read a run
 
@@ -162,14 +204,17 @@ Each run of a scenario lands in `data/runs/<benchmark>/<scenario>/<run ID>/`. Th
     task.json      the task as the agent read it
     out/           what the agent wrote, such as prediction.json
     log.txt        the container's stdout and stderr
+    requests.jsonl each model request of the task, if the agent calls a model
 ```
 
 The command writes `run.json` before the first task and again after each task. It writes a new file and renames it into place, so `run.json` is always whole. `run.json` holds:
 
 - `runId`, `benchmark`, and `scenario`.
-- `agent`: the `name`, `seesCandidates`, `needsTelemetry`, `timeoutSeconds`, `resources`, the `image` tag, and the `imageId`.
+- `agent`: the `name`, `seesCandidates`, `needsTelemetry`, `needsModel`, `timeoutSeconds`, `resources`, the `image` tag, and the `imageId`.
 - `seed`.
 - `rows`: the rows of the run, or `null` for every row.
+- `model`: the model `id`, the `effort`, the `taskBudgetUsd`, the `upstreamUrl`, and the `prices`, or `null` for an agent that calls no model. `prices` names the price `table`, its `source`, and the date it was `checkedAt`, and gives `usdPerMTok` for each kind of token.
+- `budgetUsd`: the run's budget, or `null`.
 - `jobs`: how many tasks ran at once.
 - `git`: the `commit` and whether the checkout was `dirty`, with uncommitted changes.
 - `versions`: Node, and the Docker client and daemon.
@@ -177,7 +222,13 @@ The command writes `run.json` before the first task and again after each task. I
 - `startedAt`, in UTC.
 - `resumes`: the `startedAt`, `git`, and `versions` of each later session of the run.
 - `endedAt`, in UTC, or `null` while a task has no outcome.
-- `tasks`: the `row`, `taskIndex`, `outcome`, `exitCode`, and `seconds` of each task, in row order.
+- `tasks`: the `row`, `taskIndex`, `outcome`, `exitCode`, `seconds`, and `usage` of each task, in row order.
+- `abandoned`: the `row` and `usage` of each task that a stopped session started and a resumed session deleted.
+- `usage`: the usage of the whole run, `abandoned` included.
+
+A `usage` is `null` for an agent that calls no model. Otherwise it counts the `requests` that the proxy forwarded, the `upstreamErrors` among them, and the `deniedRequests`. It says whether a budget denied a request, in `budgetExhausted`, and how long the API took, in `modelSeconds`. It sums the `inputTokens`, `outputTokens`, `cacheCreation5mInputTokens`, `cacheCreation1hInputTokens`, and `cacheReadInputTokens`, and gives the `costUsd`.
+
+Each line of `requests.jsonl` is one request. A forwarded request has the time `at`, the HTTP `status`, the `seconds` it took, the API's `requestId`, the `error` type or `null`, the `tokens`, and the `costUsd`. A denied request has `at`, `status`, and `error`. The file holds no prompt, no response, and no key.
 
 ## Run an agent in a container
 
@@ -187,6 +238,7 @@ Each agent has a folder, `agents/<name>/` at the repository root, with a `Docker
 | ---------------- | -------------------------------------------------------------------------------- |
 | `seesCandidates` | `/task.json` lists the candidate components and reasons of the scenario.         |
 | `needsTelemetry` | The container gets the scenario's telemetry at `/data`.                          |
+| `needsModel`     | The container calls Claude through the [model proxy](#reach-the-model).          |
 | `timeoutSeconds` | `evorca evaluate` kills the container of a task that runs longer than this time. |
 | `resources`      | The container's `memoryMiB`, `tmpMiB` for `/tmp`, `cpus`, and `pids`.            |
 | `jobs`           | How many tasks run at once without `--jobs`.                                     |
@@ -202,8 +254,9 @@ The container of a task sees:
 - `/data`, read-only, only if the agent needs telemetry. It is `data/benchmarks/openrca/<scenario>/telemetry/`. The container never sees `query.csv` or `record.csv`, which hold the answers.
 - `/tmp`, a folder in memory of `tmpMiB`. Its files count toward the container's memory.
 - `EVORCA_SEED`, the seed of the run.
+- If the agent needs a model, `ANTHROPIC_BASE_URL`, the URL of the model proxy, and `ANTHROPIC_API_KEY`, a token that the proxy accepts only while the task runs. The token is never the real API key. `EVORCA_MODEL` and `EVORCA_EFFORT` name the run's model and effort, and `EVORCA_TASK_BUDGET_USD` gives the task's budget.
 
-The container has no network and a read-only root file system. It runs as user `65534:65534` with no Linux capabilities and `no-new-privileges`, and it gets the memory, CPUs, and processes of the agent's `resources`. The `random` agent gets 1024 MiB of memory, a 64 MiB `/tmp`, one CPU, and at most 128 processes, and it runs one task at a time. Each container carries the label `evorca.run=<run ID>`.
+An agent without `needsModel` gets no network. Every container has a read-only root file system. It runs as user `65534:65534` with no Linux capabilities and `no-new-privileges`, and it gets the memory, CPUs, and processes of the agent's `resources`. The `random` agent gets 1024 MiB of memory, a 64 MiB `/tmp`, one CPU, and at most 128 processes, and it runs one task at a time. Each container carries the label `evorca.run=<run ID>`.
 
 Each task ends with one outcome. Only `answered` scores the agent's answer. Every other outcome scores the empty prediction `{}`, which scores 0.
 
@@ -214,5 +267,27 @@ Each task ends with one outcome. Only `answered` scores the agent's answer. Ever
 | `invalid-prediction` | The container exits with code 0, and `/out/prediction.json` is not valid.    |
 | `nonzero-exit`       | The container exits with another code.                                       |
 | `timeout`            | `evorca evaluate` kills the container at the agent's timeout.                |
+| `budget-exhausted`   | The run's model budget ran out before the task started or while it ran.      |
 
 If Docker cannot start a container, `docker run` exits with code 125, and `evorca evaluate` stops and prints the container's log.
+
+### Reach the model
+
+An agent with `needsModel` reaches one endpoint, the model proxy at `ANTHROPIC_BASE_URL`. The proxy runs inside `evorca evaluate` and listens on the host's 127.0.0.1. One relay container per run, `evorca-<run ID>-relay`, forwards TCP from its port 8080 to the proxy through `host.docker.internal`. Each task gets its own internal Docker network, which holds only the task's container and the relay, by the name `evorca-proxy`. The network has no gateway address. The task's container resolves no other name and reaches no other address, so it cannot reach the internet, the host, or Docker's virtual machine.
+
+The command checks this. It refuses a task network that Docker gave a gateway address. Before the first task, a container on such a network must get an answer from the proxy, find no default route, fail to resolve `api.anthropic.com`, and fail to reach `1.1.1.1:443`. After each task, the relay must still run. Otherwise the run stops, and a resume runs the task again.
+
+This needs Docker Desktop, where `host.docker.internal` reaches the host's 127.0.0.1. On Linux, the check fails before any task.
+
+The proxy forwards only `POST /v1/messages` without streaming, and only with the token of a running task. It takes the token from `x-api-key` or `Authorization: Bearer`. It sends the real API key upstream in place of the token, with the body that it checked, serialized again. It denies any other request with an error in the API's shape, `{"type":"error","error":{"type":"...","message":"..."}}`:
+
+| Status | Type                      | When                                                                                                                                                    |
+| ------ | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 401    | `authentication_error`    | The token is not the token of a running task.                                                                                                           |
+| 404    | `not_found_error`         | The request is not `POST /v1/messages`.                                                                                                                 |
+| 403    | `evorca_budget_exhausted` | The task or the run has spent its budget.                                                                                                               |
+| 413    | `request_too_large`       | The body is larger than 32 MiB.                                                                                                                         |
+| 429    | `rate_limit_error`        | The task already has 4 requests in flight.                                                                                                              |
+| 400    | `invalid_request_error`   | The request asks for streaming, another model, another effort, a beta feature, a server tool, MCP servers, a URL source, or inference outside `global`. |
+
+A request sets its effort in `output_config.effort`. Without it, the request uses the model's default effort, which must then be the run's effort. Server tools, MCP servers, and URL sources would let the API reach the internet for the agent. So the proxy forwards only custom tools and the bash, text editor, and memory tools, which the agent runs itself. The proxy passes the API's own errors through, such as 429 and 529, with their `retry-after` headers, so the SDK retries them. The proxy's own errors carry `x-should-retry: false` for a 4xx and `true` for a 5xx, so the SDK retries only a 5xx. The exception is a response that takes longer than 15 minutes. The proxy answers it with 504 `timeout_error` and no retry, because a retry would take as long. Ask for fewer `max_tokens`.

@@ -6,9 +6,14 @@ import { describe, expect, it } from "vitest";
 const packageDir = fileURLToPath(new URL("..", import.meta.url));
 
 async function evorca(...args: string[]) {
+  return evorcaWith({}, ...args);
+}
+
+async function evorcaWith(env: Record<string, string>, ...args: string[]) {
   const flags = ["--experimental-ffi", "--disable-warning=ExperimentalWarning", "--import", "tsx"];
   return promisify(execFile)(process.execPath, [...flags, "src/main.ts", ...args], {
     cwd: packageDir,
+    env: { ...process.env, ...env },
   }).then(
     ({ stderr }) => ({ code: 0, stderr }),
     (error: { code: number; stderr: string }) => ({ code: error.code, stderr: error.stderr }),
@@ -69,6 +74,52 @@ describe("evorca evaluate", () => {
 
     expect(code).toBe(1);
     expect(stderr).toContain(message);
+  });
+
+  it.each([
+    ["--effort=extreme", "Unknown effort: extreme"],
+    ["--model=claude-nope", "Unknown model: claude-nope"],
+    ["--budget-usd=0", "--budget-usd must be a positive number"],
+    ["--task-budget-usd=two", "--task-budget-usd must be a positive number"],
+  ])("exits with code 1 for %s", async (flag, message) => {
+    const { code, stderr } = await evorca(
+      "evaluate",
+      "--benchmark=openrca",
+      "--agent=random",
+      flag,
+    );
+
+    expect(code).toBe(1);
+    expect(stderr).toContain(message);
+  });
+
+  it.each(["http://api.example.com", "ftp://127.0.0.1", "not a url"])(
+    "exits with code 1 for EVORCA_UPSTREAM_URL=%s, which could send the key in clear",
+    async (url) => {
+      const env = { EVORCA_UPSTREAM_URL: url };
+      const { code, stderr } = await evorcaWith(
+        env,
+        "evaluate",
+        "--benchmark=openrca",
+        "--agent=random",
+      );
+
+      expect(code).toBe(1);
+      expect(stderr).toContain("EVORCA_UPSTREAM_URL must be an https URL");
+    },
+  );
+
+  it("exits with code 1 for a model flag on an agent that calls no model", async () => {
+    const { code, stderr } = await evorca(
+      "evaluate",
+      "--benchmark=openrca",
+      "--scenario=telecom",
+      "--agent=random",
+      "--budget-usd=5",
+    );
+
+    expect(code).toBe(1);
+    expect(stderr).toContain("apply only to an agent that calls a model, and random does not");
   });
 
   it("exits with code 1 for a run ID that is not one", async () => {

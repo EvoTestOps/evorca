@@ -1,8 +1,7 @@
 /**
  * The record of an `evorca evaluate` run, `run.json`, and what a resumed run
  * needs from it. `evorca evaluate` rewrites `run.json` after every task, so a
- * run that stops can resume from its last finished task with the settings it
- * started with.
+ * run that stops can resume with the settings it started with.
  *
  * @module
  */
@@ -12,10 +11,12 @@ import { isDeepStrictEqual } from "node:util";
 import type { OpenRcaScenario, TaskIndex } from "@evorca/openrca";
 import type { pinnedInputs } from "@evorca/openrca/scoring";
 import type { Agent, AgentName, Outcome } from "./agents.js";
+import { isRecord, type Effort, type ModelId, type ModelUsage, type Prices } from "./models.js";
 
 /**
- * What `run.json` records about one task. `exitCode` is null after a timeout or
- * when a signal ended the `docker run` client.
+ * What `run.json` records about one task. `exitCode` is null after a timeout,
+ * when a signal ended the `docker run` client, or when the task never started.
+ * `usage` is null unless the agent calls a model.
  */
 export type TaskRecord = {
   readonly row: number;
@@ -23,6 +24,24 @@ export type TaskRecord = {
   readonly outcome: Outcome;
   readonly exitCode: number | null;
   readonly seconds: number;
+  readonly usage: ModelUsage | null;
+};
+
+/**
+ * The model of a run: its API ID, its effort, the budget of each task, the API
+ * that the proxy forwards to, and the prices behind each cost.
+ */
+export type ModelSettings = {
+  readonly id: ModelId;
+  readonly effort: Effort;
+  readonly taskBudgetUsd: number;
+  readonly upstreamUrl: string;
+  readonly prices: {
+    readonly table: string;
+    readonly source: string;
+    readonly checkedAt: string;
+    readonly usdPerMTok: Prices;
+  };
 };
 
 /** The agent of a run: its entry in the agents table, its name, and its image. */
@@ -43,9 +62,13 @@ export type Versions = {
 
 /**
  * What `run.json` records about the run of one agent on one scenario. `rows` is
- * null when the run covers every task. `jobs` is how many tasks ran at once in
- * the latest session. `resumes` lists each later session of the run, and
- * `endedAt` is null until every task has an outcome.
+ * null when the run covers every task. `model` and `budgetUsd`, the model budget
+ * of the whole run over all its scenarios, are null unless the agent calls a
+ * model. `jobs` and `budgetUsd` hold the values of the latest session.
+ * `resumes` lists each later session of the run, and `endedAt` is null until
+ * every task has an outcome. `abandoned` holds the usage of the tasks that a
+ * stopped session left without an outcome, which ran again. `usage` adds up
+ * the usage of the tasks and of `abandoned`.
  */
 export type RunRecord = {
   readonly runId: string;
@@ -54,6 +77,8 @@ export type RunRecord = {
   readonly agent: AgentRecord;
   readonly seed: number;
   readonly rows: readonly number[] | null;
+  readonly model: ModelSettings | null;
+  readonly budgetUsd: number | null;
   readonly jobs: number;
   readonly git: GitState;
   readonly pinnedInputs: typeof pinnedInputs;
@@ -66,31 +91,51 @@ export type RunRecord = {
   }[];
   readonly endedAt: string | null;
   readonly tasks: readonly TaskRecord[];
+  readonly abandoned: readonly { readonly row: number; readonly usage: ModelUsage }[];
+  readonly usage: ModelUsage | null;
 };
 
 /** The settings of a run that its results depend on. A resumed run keeps each of them. */
-export type Conditions = Pick<RunRecord, "agent" | "seed" | "rows">;
+export type Conditions = Pick<RunRecord, "agent" | "seed" | "rows" | "model">;
 
-const conditionKeys = ["agent", "seed", "rows"] as const satisfies readonly (keyof Conditions)[];
+const conditionKeys = [
+  "agent",
+  "seed",
+  "rows",
+  "model",
+] as const satisfies readonly (keyof Conditions)[];
 
 /**
  * Returns one line for each setting that a resumed run asks for and that
- * differs from the run's own. An undefined setting keeps the run's.
+ * differs from the run's own. A line names the field that differs, such as
+ * `model.effort`. An undefined setting keeps the run's.
  */
 export function conflicts(recorded: Conditions, requested: Partial<Conditions>): string[] {
-  return conditionKeys.flatMap((key) => {
-    const value = requested[key];
-    if (value === undefined || isDeepStrictEqual(value, recorded[key])) return [];
-    return [`${key}: the run has ${JSON.stringify(recorded[key])}, not ${JSON.stringify(value)}`];
-  });
+  return conditionKeys.flatMap((key) =>
+    requested[key] === undefined ? [] : differences(key, recorded[key], requested[key]),
+  );
 }
 
-/** Returns the tasks of `tasks` that have no outcome in `records`, in the order of `tasks`. */
+function differences(path: string, recorded: unknown, requested: unknown): string[] {
+  if (isDeepStrictEqual(requested, recorded)) return [];
+  if (isRecord(recorded) && isRecord(requested)) {
+    const keys = new Set([...Object.keys(recorded), ...Object.keys(requested)]);
+    return [...keys].flatMap((key) => differences(`${path}.${key}`, recorded[key], requested[key]));
+  }
+  return [`${path}: the run has ${JSON.stringify(recorded)}, not ${JSON.stringify(requested)}`];
+}
+
+/**
+ * Returns the tasks of `tasks` that have no outcome in `records`, in the order
+ * of `tasks`. A `budget-exhausted` task never started, so it runs again.
+ */
 export function tasksToRun<T extends { readonly row: number }>(
   tasks: readonly T[],
   records: readonly TaskRecord[],
 ): T[] {
-  const done = new Set(records.map((record) => record.row));
+  const done = new Set(
+    records.filter((record) => record.outcome !== "budget-exhausted").map((record) => record.row),
+  );
   return tasks.filter((task) => !done.has(task.row));
 }
 
