@@ -62,6 +62,7 @@ import {
   isFinished,
   readRuns,
   runPool,
+  taskDirOf,
   tasksToRun,
   writeJson,
   type AgentRecord,
@@ -728,10 +729,6 @@ function totalUsage(
 const allScenarios = Object.keys(openRcaScenarios).filter((scenario): scenario is OpenRcaScenario =>
   Object.hasOwn(openRcaScenarios, scenario),
 );
-
-function taskDirOf(runDir: string, row: number): string {
-  return join(runDir, "tasks", String(row).padStart(3, "0"));
-}
 
 function newRunId(agent: AgentName): string {
   return `${new Date().toISOString().replace(/[-:]|\.\d+/g, "")}-${agent}`;

@@ -10,6 +10,7 @@ The `evorca` command. From the repository root, `pnpm evorca` runs it without a 
 - `evorca reproduce`, which downloads only the answer keys and checks that evorca reproduces the scores that a benchmark publishes. It keeps the scorer's checkout and environment in `.cache/` at the repository root.
 - `evorca evaluate`, which runs an agent from `agents/` on a benchmark's scenarios, one Docker container per task and several tasks at a time, scores the answers, and keeps each run in `data/runs/<benchmark>/<scenario>/` at the repository root. A run that stops can resume from its last finished task. `--runs` repeats a run with the same settings. An agent that calls a model reaches the Anthropic API only through a proxy that holds the API key and the budgets.
 - `evorca report`, which prints the mean, the spread, the cost, and the wall time of finished runs from their folders.
+- `evorca watch`, which shows a run full screen while it runs: its progress, each task as a dot, and the commands, output, and reasoning of one task's agent. It reads the run folder and never changes the run.
 - One benchmark, `openrca`, through [`@evorca/openrca`](../openrca/README.md).
 
 ## Non-goals
@@ -33,6 +34,7 @@ evorca evaluate --benchmark=<benchmark> --agent=<agent> [--scenario=<scenario>..
 evorca evaluate --benchmark=<benchmark> --resume=<run ID> [--scenario=<scenario>...]
                 [--jobs=<count>] [--budget-usd=<dollars>]
 evorca report --benchmark=<benchmark> [--scenario=<scenario>...] <run ID>...
+evorca watch --benchmark=<benchmark> [--scenario=<scenario>...] [<run ID>]
 ```
 
 - Without arguments, `evorca` opens the [interactive shell](#use-the-shell).
@@ -48,6 +50,7 @@ evorca report --benchmark=<benchmark> [--scenario=<scenario>...] <run ID>...
 - The four model flags apply only to an agent that calls a model.
 - `--resume` continues the run with that ID. The run keeps its agent, seed, rows, and model settings. `--jobs` and `--budget-usd` can change. With `--scenario`, the command resumes only those scenarios of the run. Resuming one run of a `--runs` series finishes the whole series.
 - `evorca report` takes one or more run IDs. With `--scenario`, it reports only those scenarios.
+- `evorca watch` takes one run ID or none. Without one, it follows the newest run in the folders of the scenarios.
 - `EVORCA_SEED`, a non-negative integer in the environment, sets the seed of `evorca evaluate`. Without it, the command picks a seed and prints it, or uses the seed of the run it resumes.
 - `ANTHROPIC_API_KEY` in the environment is the API key for an agent that calls a model. `pnpm evorca` reads it from `.env` at the repository root if the file exists. The command removes it from its environment before it starts any process.
 - `EVORCA_UPSTREAM_URL` replaces `https://api.anthropic.com` as the API that the model proxy calls, such as with a mock in a test.
@@ -300,6 +303,44 @@ The command writes `run.json` before the first task and again after each task. I
 A `usage` is `null` for an agent that calls no model. Otherwise it counts the `requests` that the proxy forwarded, the `upstreamErrors` among them, and the `deniedRequests`. It says whether a budget denied a request, in `budgetExhausted`, and how long the API took, in `modelSeconds`. It sums the `inputTokens`, `outputTokens`, `cacheCreation5mInputTokens`, `cacheCreation1hInputTokens`, and `cacheReadInputTokens`, and gives the `costUsd`.
 
 Each line of `requests.jsonl` is one request. A forwarded request has the time `at`, the HTTP `status`, the `seconds` it took, the API's `requestId`, the `error` type or `null`, the `tokens`, and the `costUsd`. A denied request has `at`, `status`, and `error`. The file holds no prompt, no response, and no key.
+
+### Watch a run
+
+`evorca watch` shows a run full screen, in the grays of the shell, while `evorca evaluate` runs it. Open a second terminal at the repository root and run:
+
+```sh
+pnpm evorca watch --benchmark=openrca --scenario=telecom
+```
+
+Without a run ID, the view follows the newest run of the scenario. When a run of a `--runs` series ends, the view moves to the next run as soon as its folder appears. It then shows the live task of that run. With a run ID, it shows only that run, finished or not. Of a run that covers several scenarios, it shows the scenario with running tasks. It needs a terminal, and it exits with code 1 without one.
+
+The header gives the run of the series, the scenario, the run ID, the model and its effort, the tasks done of the run's tasks, the count of each outcome, what the run has spent against its budget, and the elapsed time, or the time since the last resume. While tasks remain, it estimates the time left from the mean time of a finished task and the number of tasks at a time. It shows the strict and partial accuracy only once the run is scored.
+
+Under the header, each task of the run is a dot. A dark dot waits, a blinking dot runs, a lit dot has an answer, and `×` is any other outcome. A highlight marks the task on screen. The line under the dots gives that task's row, its kind, its outcome or state, its time, and its cost.
+
+The feed below shows the task's trajectory as a log, one entry per line with the local time:
+
+- `task`, the instruction.
+- `turn`, each model response with its number, its time, and its cost.
+- `think`, the summary of the model's thinking.
+- `agent`, the text of a response.
+- `$`, each command, and under it the output that the agent sees, or `running…` until the command ends. A command that never got its output, such as one cut off by the task's timeout, shows `no result`. Output longer than seven lines folds to six.
+- `answer`, the root causes that the agent submitted.
+- `note`, each message from the agent's loop, such as a request to answer now, and each API error.
+
+At first the feed shows the live task: the running task on the lowest row, or else the last task done. It follows the feed as it grows. These keys move around:
+
+| Key                           | Action                                         |
+| ----------------------------- | ---------------------------------------------- |
+| ↑ ↓, Page Up, Page Down, Home | Scroll the feed. Scrolling up pauses the tail. |
+| End                           | Scroll to the end and follow the feed again.   |
+| o                             | Show all the output, or fold it again.         |
+| ← →                           | Show the previous or next task that started.   |
+| Tab                           | Show the next running task.                    |
+| f                             | Show the live task again.                      |
+| q, ctrl+c                     | Quit. The run goes on.                         |
+
+`evorca watch` reads the folder of the run once a second and never writes to it. It reads each growing file from where the last read stopped, and it waits for the end of a line that the agent is still writing. A task is running from when its folder appears until `run.json` records its outcome, so a task of a run that crashed shows as running. To count the tasks of a run that covers every row, it reads the tasks from `query.csv` without their scoring points.
 
 ## Run an agent in a container
 
