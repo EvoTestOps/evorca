@@ -62,6 +62,14 @@ export const agents = {
     resources: { memoryMiB: 1024, tmpMiB: 64, cpus: 1, pids: 128 },
     jobs: 1,
   },
+  react: {
+    seesCandidates: true,
+    needsTelemetry: true,
+    needsModel: true,
+    timeoutSeconds: 3600,
+    resources: { memoryMiB: 3072, tmpMiB: 1024, cpus: 2, pids: 256 },
+    jobs: 2,
+  },
 } satisfies Record<string, Agent>;
 
 /** The name of an agent, such as `random`. */
@@ -163,7 +171,8 @@ export type TaskContainer = {
  * agent's limits on memory, `/tmp`, CPU, and processes. It gets `task.json` at
  * `/task.json`, read-only, and `out/` at `/out`, writable. If the agent needs
  * telemetry, it gets `<dataDir>/<scenario>/telemetry/` at `/data`, read-only.
- * The seed is in `EVORCA_SEED`, and the `evorca.run` label holds the run ID.
+ * The seed is in `EVORCA_SEED`, the agent's timeout in
+ * `EVORCA_TASK_TIMEOUT_SECONDS`, and the `evorca.run` label holds the run ID.
  *
  * Without `model`, the container has no network. With `model`, it joins the
  * task's network, and its environment holds the proxy's URL in
@@ -175,6 +184,7 @@ export function dockerRunArgs(container: TaskContainer): string[] {
   const { memoryMiB, tmpMiB, cpus, pids } = agent.resources;
   const env = [
     `EVORCA_SEED=${seed}`,
+    `EVORCA_TASK_TIMEOUT_SECONDS=${agent.timeoutSeconds}`,
     ...(model === undefined
       ? []
       : [

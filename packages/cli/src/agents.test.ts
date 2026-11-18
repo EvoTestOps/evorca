@@ -43,7 +43,7 @@ describe("dockerRunArgs", () => {
     expect(valuesOf(args, "--cap-drop")).toEqual(["ALL"]);
     expect(valuesOf(args, "--security-opt")).toEqual(["no-new-privileges"]);
     expect(valuesOf(args, "--user")).toEqual(["65534:65534"]);
-    expect(valuesOf(args, "--env")).toEqual(["EVORCA_SEED=42"]);
+    expect(valuesOf(args, "--env")).toEqual(["EVORCA_SEED=42", "EVORCA_TASK_TIMEOUT_SECONDS=60"]);
     expect(valuesOf(args, "--label")).toEqual(["evorca.run=20261117T120000Z-random"]);
     expect(args.at(-1)).toBe("sha256:0123");
   });
@@ -101,6 +101,7 @@ describe("dockerRunArgs", () => {
       expect(valuesOf(args, "--network")).toEqual(["evorca-20261117T120000Z-react-telecom-7"]);
       expect(valuesOf(args, "--env")).toEqual([
         "EVORCA_SEED=42",
+        "EVORCA_TASK_TIMEOUT_SECONDS=60",
         "ANTHROPIC_BASE_URL=http://evorca-proxy:8080",
         "ANTHROPIC_API_KEY=evorca-task-token",
         "EVORCA_MODEL=claude-sonnet-5",
@@ -110,6 +111,12 @@ describe("dockerRunArgs", () => {
       expect(args).toContain("--read-only");
       expect(valuesOf(args, "--cap-drop")).toEqual(["ALL"]);
       expect(valuesOf(args, "--user")).toEqual(["65534:65534"]);
+    });
+
+    it("tells the react agent its one-hour timeout", () => {
+      const args = dockerRunArgs({ ...container, agent: agents.react, model });
+
+      expect(valuesOf(args, "--env")).toContain("EVORCA_TASK_TIMEOUT_SECONDS=3600");
     });
 
     it("never passes the real API key, not even by name", () => {
