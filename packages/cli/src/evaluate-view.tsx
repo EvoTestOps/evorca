@@ -21,7 +21,7 @@
 import { format } from "node:util";
 import { createCliRenderer } from "@opentui/core";
 import { createRoot } from "@opentui/react";
-import { palette } from "./shell.js";
+import { palette } from "./parts.js";
 import { readRunFolders, type Frame, type RunFolders } from "./watch-folder.js";
 import { Watch } from "./watch-view.js";
 import type { Selection } from "./watch.js";

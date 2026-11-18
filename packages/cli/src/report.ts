@@ -9,9 +9,9 @@
  */
 import { readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
-import { openRcaScenarios, type OpenRcaScenario } from "@evorca/openrca";
+import type { OpenRcaScenario } from "@evorca/openrca";
 import type { Summary } from "@evorca/openrca/scoring";
-import { conflicts, isFinished, readRuns, type RunRecord } from "./runs.js";
+import { allScenarios, conflicts, isFinished, readRuns, type RunRecord } from "./runs.js";
 
 type FinishedRun = {
   readonly record: RunRecord;
@@ -21,9 +21,6 @@ type FinishedRun = {
 
 const levels = ["easy", "middle", "hard", "total"] as const;
 const measures = ["strict", "partial"] as const;
-const everyScenario = Object.keys(openRcaScenarios).filter(
-  (key): key is OpenRcaScenario => key in openRcaScenarios,
-);
 
 /**
  * Prints the summary of the runs `runIds` for each of `scenarios` that one of
@@ -47,7 +44,7 @@ export async function reportRuns({
   readonly runIds: readonly string[];
 }): Promise<boolean> {
   const runs = new Map<string, Map<OpenRcaScenario, RunRecord>>();
-  for (const runId of runIds) runs.set(runId, await readRuns(runsDir, runId, everyScenario));
+  for (const runId of runIds) runs.set(runId, await readRuns(runsDir, runId, allScenarios));
   const missing = [...runs].filter(([, run]) => run.size === 0).map(([runId]) => runId);
   if (missing.length > 0) {
     console.error(`No run ${missing.join(", ")} in ${relative(process.cwd(), runsDir)}.`);

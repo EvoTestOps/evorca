@@ -5,7 +5,7 @@ The `evorca` command. From the repository root, `pnpm evorca` runs it without a 
 ## Scope
 
 - An interactive shell in the terminal, built with [OpenTUI](https://github.com/anomalyco/opentui), which `evorca` opens when it runs without arguments. It opens on a home screen with the evorca wordmark and an input line, then shows a transcript of the session above the input line. A footer shows the working directory and the version.
-- The slash commands `/help` and `/exit`.
+- The slash commands `/help`, `/benchmark`, and `/exit`. `/benchmark` picks scenarios, tasks, and an agent, then runs `evorca evaluate` in the shell's process, in the view of `evorca watch`.
 - `evorca fetch`, which downloads the answer keys and the telemetry of a benchmark's scenarios into `data/benchmarks/<benchmark>/<scenario>/` at the repository root, or reads them from dataset archives on disk.
 - `evorca reproduce`, which downloads only the answer keys and checks that evorca reproduces the scores that a benchmark publishes. It keeps the scorer's checkout and environment in `.cache/` at the repository root.
 - `evorca evaluate`, which runs an agent from `agents/` on a benchmark's scenarios, one Docker container per task and several tasks at a time, scores the answers, and keeps each run in `data/runs/<benchmark>/<scenario>/` at the repository root. A run that stops can resume from its last finished task. `--runs` repeats a run with the same settings. An agent that calls a model reaches the Anthropic API only through a proxy that holds the API key and the budgets.
@@ -29,9 +29,9 @@ evorca
 evorca fetch --benchmark=<benchmark> [--scenario=<scenario>...] [--archive=<path>...]
 evorca reproduce --benchmark=<benchmark> [--scenario=<scenario>...] [--archive=<path>...]
 evorca evaluate --benchmark=<benchmark> --agent=<agent> [--scenario=<scenario>...]
-                [--runs=<count>] [--rows=<row>,...] [--jobs=<count>] [--model=<model>]
-                [--effort=<effort>] [--budget-usd=<dollars>] [--task-budget-usd=<dollars>]
-                [--plain]
+                [--runs=<count>] [--rows=[<scenario>:]<row>,...] [--jobs=<count>]
+                [--model=<model>] [--effort=<effort>] [--budget-usd=<dollars>]
+                [--task-budget-usd=<dollars>] [--plain]
 evorca evaluate --benchmark=<benchmark> --resume=<run ID> [--scenario=<scenario>...]
                 [--jobs=<count>] [--budget-usd=<dollars>] [--plain]
 evorca report --benchmark=<benchmark> [--scenario=<scenario>...] <run ID>...
@@ -44,7 +44,7 @@ evorca watch --benchmark=<benchmark> [--scenario=<scenario>...] [<run ID>]
 - `--agent` is required by `evorca evaluate`, unless it resumes a run. The agents are `random` and [`react`](../../agents/react/README.md).
 - `--archive` names a dataset archive on disk and can repeat. `evorca fetch` and `evorca reproduce` read the files of that archive from disk instead of downloading them, and check them in the same way. See [Fetch a scenario](#fetch-a-scenario).
 - `--runs` sets how many complete runs `evorca evaluate` makes, one after another, with the same settings. Without it, the command makes one run. See [Repeat a run](#repeat-a-run).
-- `--rows` limits `evorca evaluate` to some rows of each scenario's `query.csv`, counted from 0, such as `--rows=0,7,21` for a pilot. Without it, the command runs every task.
+- `--rows` limits `evorca evaluate` to some rows of each scenario's `query.csv`, counted from 0, such as `--rows=0,7,21` for a pilot. Without it, the command runs every task. It can repeat, and a value that starts with a scenario, such as `--rows=bank:3,4`, gives the rows of that scenario only. So `--rows=0,7 --rows=bank:3,4` runs rows 0 and 7 of each scenario but `bank`, and rows 3 and 4 of `bank`.
 - `--jobs` sets how many tasks `evorca evaluate` runs at once. Without it, the command uses the `jobs` of the run it resumes, or else the agent's `jobs`.
 - `--model` and `--effort` set the model that the agent calls and its effort. The only model is `claude-sonnet-5`, and its default effort is `high`. The efforts are `low`, `medium`, `high`, `xhigh`, and `max`.
 - `--budget-usd` caps what the run spends on the model, in US dollars, and defaults to 50. `--task-budget-usd` caps what each task spends and defaults to 2.
@@ -68,7 +68,7 @@ fetched  data/benchmarks/openrca/telecom/telemetry/2020_04_11/trace/trace_span.c
 
 Both commands exit with code 1 and list the valid choices if the command, the benchmark, or a scenario is unknown. They also exit with code 1, and print the reason, if an `--archive` matches no archive of the benchmark, if a file on disk does not match its pinned hash, if the missing files need more than the free disk space, or if a download fails. The free-space message gives both sizes in GB. When Google Drive refuses a download because the file's quota is used up, the message names the archive, its link for a browser, and the command to run with `--archive` once you have downloaded it.
 
-`evorca evaluate` prints one line per task, then the outcomes and the accuracy of each scenario. It exits with code 1 and lists the agents if `--agent` is missing or unknown. Before it runs any task, it exits with code 1 if a model flag is given for an agent that calls no model, if an agent that calls a model has no API key, if a scenario's data is missing, with the `evorca fetch` command that downloads it, if a row in `--rows` does not exist, if Docker does not answer, if a container cannot reach the model proxy, or if the run to resume is missing or has other settings. It names each setting that differs. It exits with code 1 for `--runs` together with `--resume`, because a resumed series keeps its number of runs.
+`evorca evaluate` prints one line per task, then the outcomes and the accuracy of each scenario. It exits with code 1 and lists the agents if `--agent` is missing or unknown. Before it runs any task, it exits with code 1 if a model flag is given for an agent that calls no model, if an agent that calls a model has no API key, if a scenario's data is missing, with the `evorca fetch` command that downloads it, if a row in `--rows` does not exist, if a `--rows` value names a scenario that the run does not cover or gives rows that another value gives, if Docker does not answer, if a container cannot reach the model proxy, or if the run to resume is missing or has other settings. It names each setting that differs. It exits with code 1 for `--runs` together with `--resume`, because a resumed series keeps its number of runs.
 
 `evorca report` exits with code 1 if a run is missing, if two runs have other settings, or if no run of a scenario is finished. It names each setting that differs.
 
@@ -83,9 +83,21 @@ pnpm evorca
 The shell opens on the home screen. The wordmark is a panel of dots, like an LED display. Its dots switch on one at a time, and every few seconds a few of them dim for a moment. While the input line is empty, its placeholder types out example questions. Type a message and press Enter. After the first message, the transcript replaces the home screen. The transcript is a log. Each line you send appears in it, followed by the reply, and each entry starts with the local time and `you` or `evorca`. These commands are available:
 
 - `/help` lists the commands.
+- `/benchmark` picks an evaluation and runs it in the shell, as [Run a benchmark from the shell](#run-a-benchmark-from-the-shell) explains.
 - `/exit` closes evorca. ctrl+c does the same.
 
 The shell paints the whole screen in grays on a near-black background, so it looks the same in light and dark terminals. When the terminal is narrower than 73 columns, the plain name replaces the wordmark. In the transcript view, nothing moves while the input line holds text, and the shell does no work until you type or resize the terminal. The shell needs an interactive terminal. When stdin or stdout is not one, as in `echo hi | pnpm evorca`, it prints `evorca needs an interactive terminal.` and exits with code 1.
+
+### Run a benchmark from the shell
+
+`/benchmark` opens a picker of four steps in place of the transcript. ↑ and ↓ move, Enter goes to the next step, and Esc goes back. On the first step, Esc closes the picker.
+
+1. Scenarios. Space chooses a scenario, and several can be chosen. Each line shows the number of tasks and whether the scenario's telemetry is on disk. A scenario without answer keys cannot be chosen, and its line gives the `evorca fetch` command.
+2. Tasks. The tasks of each chosen scenario, each with its row, its task index, its difficulty, and the start of its instruction. Every task starts chosen. Space toggles one task, or every task of a scenario on its scenario's line. `e`, `m`, and `h` toggle the easy, middle, and hard tasks. The picker never shows the scoring points.
+3. Agent and runs. ← and → change the agent and the number of runs. For an agent that calls a model, they also change the model, the effort, the run budget, and the task budget, which start at the defaults of `evorca evaluate`. If the agent reads telemetry that a chosen scenario lacks, the step gives the `evorca fetch` command and goes no further.
+4. Run. The tasks, the agent, the seed, and the `evorca evaluate` command that repeats the run. A scenario with tasks left out gets its rows in the command as `--rows=<scenario>:<rows>`. For an agent that calls a model, the step also shows an estimate of the cost: the mean cost per task of the finished runs in `data/runs/` with the same agent, model, and effort, times the tasks to run. Without such a run, it shows no estimate.
+
+Enter on the last step writes the command to the transcript and runs it in the shell's process. The shell shows the run in the view of [`evorca watch`](#watch-a-run), with the lines that the run prints under the feed and the input line below them. When the run ends, the transcript returns with every line that the run printed, the accuracy and the summary among them. ctrl+c stops the run as it stops `evorca evaluate`. Once the run has stopped, the transcript returns, and its last line is the command that resumes the run or finishes the series. A second ctrl+c stops the run at once, prints its lines, and closes evorca. During a run, `/exit` asks first. A second `/exit` stops the run, and evorca prints the run's lines and closes once the run has stopped.
 
 ## Fetch a scenario
 

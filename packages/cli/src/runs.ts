@@ -8,7 +8,7 @@
 import { readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
-import type { OpenRcaScenario, TaskIndex } from "@evorca/openrca";
+import { openRcaScenarios, type OpenRcaScenario, type TaskIndex } from "@evorca/openrca";
 import type { pinnedInputs } from "@evorca/openrca/scoring";
 import type { Agent, AgentName, Outcome } from "./agents.js";
 import { isRecord, type Effort, type ModelId, type ModelUsage, type Prices } from "./models.js";
@@ -103,6 +103,11 @@ export type RunRecord = {
   readonly usage: ModelUsage | null;
 };
 
+/** Every OpenRCA scenario, in the order of `openRcaScenarios`. */
+export const allScenarios = Object.keys(openRcaScenarios).filter(
+  (scenario): scenario is OpenRcaScenario => Object.hasOwn(openRcaScenarios, scenario),
+);
+
 /** Whether `text` has the form of a run ID, such as `20261117T121537Z-random`. */
 export function isRunId(text: string): boolean {
   return /^\d{8}T\d{6}Z-[a-z0-9-]+$/.test(text);
@@ -111,6 +116,49 @@ export function isRunId(text: string): boolean {
 /** The folder of the task on row `row` in the folder of a run. */
 export function taskDirOf(runDir: string, row: number): string {
   return join(runDir, "tasks", String(row).padStart(3, "0"));
+}
+
+/**
+ * The rows that a run covers in each scenario that it does not cover whole,
+ * counted from 0 in the scenario's `query.csv`.
+ */
+export type Rows = ReadonlyMap<OpenRcaScenario, readonly number[]>;
+
+/**
+ * Parses the values of `--rows` for a run of `scenarios`. A value such as
+ * `0,7,21` gives the rows of each scenario that no other value names, and a
+ * value such as `telecom:0,7,21` gives the rows of one scenario. It returns
+ * each scenario's rows in order without repeats, or the problem if a value has
+ * another form, names a scenario outside `scenarios`, or gives rows that
+ * another value already gives.
+ */
+export function parseRows(
+  values: readonly string[],
+  scenarios: readonly OpenRcaScenario[],
+): Rows | string {
+  const rows = new Map<OpenRcaScenario, number[]>();
+  let others: number[] | undefined;
+  for (const value of values) {
+    const [, name, list] = /^(?:([a-z0-9-]+):)?(\d+(?:,\d+)*)$/.exec(value) ?? [];
+    if (list === undefined) {
+      const forms = "--rows=0,7,21 or --rows=telecom:0,7,21";
+      return `--rows must list row numbers, such as ${forms}, not ${JSON.stringify(value)}.`;
+    }
+    const numbers = [...new Set(list.split(",").map(Number))].sort((a, b) => a - b);
+    const scenario = scenarios.find((candidate) => candidate === name);
+    if (name !== undefined && scenario === undefined) {
+      return `--rows=${value} names ${name}, but the run covers ${scenarios.join(", ")}.`;
+    }
+    if (scenario === undefined ? others !== undefined : rows.has(scenario)) {
+      return `Two --rows values give the rows of ${scenario ?? "every scenario"}.`;
+    }
+    if (scenario === undefined) others = numbers;
+    else rows.set(scenario, numbers);
+  }
+  for (const scenario of scenarios) {
+    if (others !== undefined && !rows.has(scenario)) rows.set(scenario, others);
+  }
+  return rows;
 }
 
 /** The settings of a run that its results depend on. A resumed run keeps each of them. */

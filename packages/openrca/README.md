@@ -25,7 +25,7 @@ OpenRCA benchmark support for evorca. It reads [OpenRCA](https://github.com/micr
 `src/index.ts` is the entry for an agent runner. It exposes no scoring points.
 
 - `openRcaScenarios` maps each scenario slug, such as `market-cloudbed-1`, to its OpenRCA system, such as `Market/cloudbed-1`. `OpenRcaScenario` is one slug. Each scenario's files live in `<dataDir>/<scenario>/`, where `dataDir` is the benchmark's data directory, `data/benchmarks/openrca` in this repository.
-- `readTasks(scenario, dataDir)` returns the tasks in `<dataDir>/<scenario>/query.csv` as `OpenRcaTask` values, in file order. A task's `TaskIndex`, `task_1` to `task_7`, decides which root cause fields the answer needs.
+- `readTasks(scenario, dataDir)` returns the tasks in `<dataDir>/<scenario>/query.csv` as `OpenRcaTask` values, in file order. A task's `TaskIndex`, `task_1` to `task_7`, decides which root cause fields the answer needs, and `difficultyOf` gives its `Difficulty`: `task_1` to `task_3` are easy, `task_4` to `task_6` are middle, and `task_7` is hard, as in OpenRCA's `main/evaluate.py`.
 - `openRcaCandidates` maps each scenario slug to its `Candidates`, the `components` and `reasons` that an answer can name. See [Show an agent the candidates](#show-an-agent-the-candidates).
 - `formatPrediction(diagnosis)` and `parsePrediction(raw)` convert between a `Diagnosis` and OpenRCA's prediction JSON. `parsePrediction` returns `undefined` for text that is not a valid prediction, so only `{}` parses as no causes.
 - `writePredictions(tasks, diagnoses)` returns the prediction CSV for one scenario, with one row per task in the order of `tasks`.

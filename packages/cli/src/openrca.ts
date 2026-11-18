@@ -15,7 +15,6 @@ import { promisify } from "node:util";
 import type { Diagnosis } from "@evorca/core";
 import {
   openRcaCandidates,
-  openRcaScenarios,
   parsePrediction,
   readTasks,
   writePredictions,
@@ -58,6 +57,7 @@ import { startModelProxy, type ModelProxy } from "./proxy.js";
 import { proxyUrl, removeRunNetworks, startRelay, type Relay } from "./relay.js";
 import { reportRuns } from "./report.js";
 import {
+  allScenarios,
   conflicts,
   isFinished,
   readRuns,
@@ -69,6 +69,7 @@ import {
   type GitState,
   type ModelSettings,
   type RunRecord,
+  type Rows,
   type Series,
   type TaskRecord,
 } from "./runs.js";
@@ -140,7 +141,7 @@ export type EvaluateRequest = {
   readonly agent: AgentName | undefined;
   readonly runs: number | undefined;
   readonly seed: number | undefined;
-  readonly rows: readonly number[] | undefined;
+  readonly rows: Rows | undefined;
   readonly jobs: number | undefined;
   readonly resume: string | undefined;
   readonly model: ModelId | undefined;
@@ -189,9 +190,15 @@ type ModelSession = {
   readonly relay: Relay;
 };
 
-const defaultModel: ModelId = "claude-sonnet-5";
-const defaultBudgetUsd = 50;
-const defaultTaskBudgetUsd = 2;
+/**
+ * The model of a run that names none, and the budgets in US dollars of a run
+ * and of each of its tasks.
+ */
+export const runDefaults: {
+  readonly model: ModelId;
+  readonly budgetUsd: number;
+  readonly taskBudgetUsd: number;
+} = { model: "claude-sonnet-5", budgetUsd: 50, taskBudgetUsd: 2 };
 
 /**
  * Runs an agent on the tasks of `scenarios`, `jobs` tasks at a time, each in
@@ -263,7 +270,7 @@ export async function evaluateOpenRca(request: EvaluateRequest & Dirs): Promise<
   const finish = `pnpm evorca evaluate --benchmark=openrca --resume=${runIds[0]}`;
   console.log(`If they stop, finish them with: ${finish}`);
 
-  let sameAs = recorded;
+  let sameAs = recorded === undefined ? undefined : resumed;
   for (const [index, runId] of runIds.entries()) {
     const existing = await readRuns(runsDir, runId, scenarios);
     if (existing.size > 0 && [...existing.values()].every(isFinished)) {
@@ -275,7 +282,7 @@ export async function evaluateOpenRca(request: EvaluateRequest & Dirs): Promise<
       const run = { ...request, scenarios, seed: firstSeed + index, resume };
       if (!(await evaluateRun(run, member)) || request.signal.aborted) return false;
     }
-    sameAs ??= (await readRuns(runsDir, runId, scenarios)).values().next().value;
+    sameAs ??= await readRuns(runsDir, runId, scenarios);
   }
   if (!(await reportRuns({ runsDir, scenarios, runIds }))) return false;
   const flags = scenarios.map((scenario) => `--scenario=${scenario}`).join(" ");
@@ -287,7 +294,7 @@ export async function evaluateOpenRca(request: EvaluateRequest & Dirs): Promise<
 type Member = {
   readonly runId: string;
   readonly series: Series;
-  readonly sameAs: RunRecord | undefined;
+  readonly sameAs: ReadonlyMap<OpenRcaScenario, RunRecord> | undefined;
 };
 
 async function evaluateRun(
@@ -312,7 +319,8 @@ async function evaluateRun(
     return false;
   }
   const recorded = resumed?.values().next().value;
-  const sameAs = recorded ?? member?.sameAs;
+  const earlier = resumed ?? member?.sameAs;
+  const sameAs = earlier?.values().next().value;
   const name = sameAs?.agent.name ?? request.agent;
   if (name === undefined) throw new Error("evaluateOpenRca needs an agent or a run to resume.");
   const runId = recorded?.runId ?? member?.runId ?? newRunId(name);
@@ -346,9 +354,10 @@ async function evaluateRun(
   }
   const tasks = new Map<OpenRcaScenario, OpenRcaTask[]>();
   for (const scenario of scenarios) tasks.set(scenario, await readTasks(scenario, dataDir));
-  const rows = request.rows ?? sameAs?.rows ?? null;
+  const rowsOf = (scenario: OpenRcaScenario) =>
+    request.rows?.get(scenario) ?? earlier?.get(scenario)?.rows ?? null;
   for (const [scenario, scenarioTasks] of tasks) {
-    const unknown = rows?.filter((row) => row >= scenarioTasks.length) ?? [];
+    const unknown = rowsOf(scenario)?.filter((row) => row >= scenarioTasks.length) ?? [];
     if (unknown.length > 0) {
       const range = `rows 0 to ${scenarioTasks.length - 1}`;
       console.error(`${scenario} has no row ${unknown.join(", ")}. Its tasks are ${range}.`);
@@ -363,13 +372,13 @@ async function evaluateRun(
 
   const image = await ensureImage(name, agentsDir);
   const agentRecord: AgentRecord = { name, ...agent, image: image.tag, imageId: image.id };
-  const modelId = request.model ?? sameAs?.model?.id ?? defaultModel;
+  const modelId = request.model ?? sameAs?.model?.id ?? runDefaults.model;
   const model: ModelSettings | null = agent.needsModel
     ? {
         id: modelId,
         effort: request.effort ?? sameAs?.model?.effort ?? models[modelId].defaultEffort,
         taskBudgetUsd:
-          request.taskBudgetUsd ?? sameAs?.model?.taskBudgetUsd ?? defaultTaskBudgetUsd,
+          request.taskBudgetUsd ?? sameAs?.model?.taskBudgetUsd ?? runDefaults.taskBudgetUsd,
         upstreamUrl: request.upstreamUrl,
         prices: {
           table: priceTable.id,
@@ -381,7 +390,15 @@ async function evaluateRun(
     : null;
   if (sameAs !== undefined) {
     const seed = recorded === undefined ? undefined : request.seed;
-    const problems = conflicts(sameAs, { agent: agentRecord, seed, rows, model });
+    const problems = [
+      ...conflicts(sameAs, { agent: agentRecord, seed, model }),
+      ...scenarios.flatMap((scenario) => {
+        const record = earlier?.get(scenario);
+        if (record === undefined) return [];
+        const rows = rowsOf(scenario);
+        return conflicts(record, { rows }).map((problem) => `${scenario} ${problem}`);
+      }),
+    ];
     if (problems.length > 0) {
       console.error(
         recorded === undefined
@@ -393,7 +410,7 @@ async function evaluateRun(
     }
   }
   const budgetUsd = agent.needsModel
-    ? (request.budgetUsd ?? sameAs?.budgetUsd ?? defaultBudgetUsd)
+    ? (request.budgetUsd ?? sameAs?.budgetUsd ?? runDefaults.budgetUsd)
     : null;
   const seed = recorded?.seed ?? request.seed ?? randomInt(2 ** 32);
   const jobs = request.jobs ?? sameAs?.jobs ?? defaultJobs;
@@ -427,6 +444,7 @@ async function evaluateRun(
   for (const [scenario, scenarioTasks] of tasks) {
     const runDir = join(runsDir, scenario, runId);
     const previous = resumed?.get(scenario);
+    const rows = rowsOf(scenario);
     const selected =
       rows === null ? scenarioTasks : scenarioTasks.filter((task) => rows.includes(task.row));
     const pending = tasksToRun(selected, previous?.tasks ?? []);
@@ -730,10 +748,6 @@ function totalUsage(
   const usages = [...tasks.map((task) => task.usage ?? noUsage), ...abandoned.map((a) => a.usage)];
   return usages.reduce((sum, usage) => addUsage(sum, usage, prices.usdPerMTok), noUsage);
 }
-
-const allScenarios = Object.keys(openRcaScenarios).filter((scenario): scenario is OpenRcaScenario =>
-  Object.hasOwn(openRcaScenarios, scenario),
-);
 
 function newRunId(agent: AgentName): string {
   return `${new Date().toISOString().replace(/[-:]|\.\d+/g, "")}-${agent}`;
