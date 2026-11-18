@@ -36,7 +36,7 @@ evorca evaluate --benchmark=<benchmark> --resume=<run ID> [--scenario=<scenario>
 - Without arguments, `evorca` opens the [interactive shell](#use-the-shell).
 - `--benchmark` is required. The only benchmark is `openrca`.
 - `--scenario` names one scenario and can repeat. Without it, the command uses every scenario of the benchmark. The `openrca` scenarios are `bank`, `telecom`, `market-cloudbed-1`, and `market-cloudbed-2`.
-- `--agent` is required by `evorca evaluate`, unless it resumes a run. The only agent is `random`.
+- `--agent` is required by `evorca evaluate`, unless it resumes a run. The agents are `random` and [`react`](../../agents/react/README.md).
 - `--rows` limits `evorca evaluate` to some rows of each scenario's `query.csv`, counted from 0, such as `--rows=0,7,21` for a pilot. Without it, the command runs every task.
 - `--jobs` sets how many tasks `evorca evaluate` runs at once. Without it, the command uses the `jobs` of the run it resumes, or else the agent's `jobs`.
 - `--model` and `--effort` set the model that the agent calls and its effort. The only model is `claude-sonnet-5`, and its default effort is `high`. The efforts are `low`, `medium`, `high`, `xhigh`, and `max`.
@@ -253,10 +253,10 @@ The container of a task sees:
 - `/out`, writable. The agent writes its answer to `/out/prediction.json` as OpenRCA prediction JSON, such as `{"1": {"root cause occurrence datetime": "2020-04-11 00:05:00", "root cause component": "docker_003", "root cause reason": "CPU fault"}}`.
 - `/data`, read-only, only if the agent needs telemetry. It is `data/benchmarks/openrca/<scenario>/telemetry/`. The container never sees `query.csv` or `record.csv`, which hold the answers.
 - `/tmp`, a folder in memory of `tmpMiB`. Its files count toward the container's memory.
-- `EVORCA_SEED`, the seed of the run.
+- `EVORCA_SEED`, the seed of the run, and `EVORCA_TASK_TIMEOUT_SECONDS`, the agent's `timeoutSeconds`.
 - If the agent needs a model, `ANTHROPIC_BASE_URL`, the URL of the model proxy, and `ANTHROPIC_API_KEY`, a token that the proxy accepts only while the task runs. The token is never the real API key. `EVORCA_MODEL` and `EVORCA_EFFORT` name the run's model and effort, and `EVORCA_TASK_BUDGET_USD` gives the task's budget.
 
-An agent without `needsModel` gets no network. Every container has a read-only root file system. It runs as user `65534:65534` with no Linux capabilities and `no-new-privileges`, and it gets the memory, CPUs, and processes of the agent's `resources`. The `random` agent gets 1024 MiB of memory, a 64 MiB `/tmp`, one CPU, and at most 128 processes, and it runs one task at a time. Each container carries the label `evorca.run=<run ID>`.
+An agent without `needsModel` gets no network. Every container has a read-only root file system. It runs as user `65534:65534` with no Linux capabilities and `no-new-privileges`, and it gets the memory, CPUs, and processes of the agent's `resources`. The `random` agent gets 1024 MiB of memory, a 64 MiB `/tmp`, one CPU, and at most 128 processes, and it runs one task at a time. The `react` agent gets 3072 MiB, a 1024 MiB `/tmp`, two CPUs, and 256 processes for an hour, and it runs two tasks at a time, so their 6 GiB fit in a Docker machine of 8 GB. Each container carries the label `evorca.run=<run ID>`.
 
 Each task ends with one outcome. Only `answered` scores the agent's answer. Every other outcome scores the empty prediction `{}`, which scores 0.
 
