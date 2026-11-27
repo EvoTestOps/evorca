@@ -126,39 +126,43 @@ export type Rows = ReadonlyMap<OpenRcaScenario, readonly number[]>;
 
 /**
  * Parses the values of `--rows` for a run of `scenarios`. A value such as
- * `0,7,21` gives the rows of each scenario that no other value names, and a
- * value such as `telecom:0,7,21` gives the rows of one scenario. It returns
- * each scenario's rows in order without repeats, or the problem if a value has
- * another form, names a scenario outside `scenarios`, or gives rows that
- * another value already gives.
+ * `0,7,21` gives rows of each scenario that no other value names, and a value
+ * such as `telecom:0,7,21` gives rows of one scenario. The values for one
+ * scenario add up, and so do the values without a scenario. It returns each
+ * scenario's rows in order, or the problem if a value has another form, names
+ * a scenario outside `scenarios`, or gives a row that is already given.
  */
 export function parseRows(
   values: readonly string[],
   scenarios: readonly OpenRcaScenario[],
 ): Rows | string {
-  const rows = new Map<OpenRcaScenario, number[]>();
-  let others: number[] | undefined;
+  const named = new Map<OpenRcaScenario, Set<number>>();
+  const others = new Set<number>();
   for (const value of values) {
     const [, name, list] = /^(?:([a-z0-9-]+):)?(\d+(?:,\d+)*)$/.exec(value) ?? [];
     if (list === undefined) {
       const forms = "--rows=0,7,21 or --rows=telecom:0,7,21";
       return `--rows must list row numbers, such as ${forms}, not ${JSON.stringify(value)}.`;
     }
-    const numbers = [...new Set(list.split(",").map(Number))].sort((a, b) => a - b);
     const scenario = scenarios.find((candidate) => candidate === name);
     if (name !== undefined && scenario === undefined) {
       return `--rows=${value} names ${name}, but the run covers ${scenarios.join(", ")}.`;
     }
-    if (scenario === undefined ? others !== undefined : rows.has(scenario)) {
-      return `Two --rows values give the rows of ${scenario ?? "every scenario"}.`;
+    const rows = scenario === undefined ? others : (named.get(scenario) ?? new Set());
+    if (scenario !== undefined) named.set(scenario, rows);
+    for (const row of list.split(",").map(Number)) {
+      if (rows.has(row)) {
+        return `--rows gives row ${row}${scenario === undefined ? "" : ` of ${scenario}`} twice.`;
+      }
+      rows.add(row);
     }
-    if (scenario === undefined) others = numbers;
-    else rows.set(scenario, numbers);
   }
-  for (const scenario of scenarios) {
-    if (others !== undefined && !rows.has(scenario)) rows.set(scenario, others);
-  }
-  return rows;
+  return new Map(
+    scenarios.flatMap((scenario) => {
+      const rows = named.get(scenario) ?? others;
+      return rows.size === 0 ? [] : [[scenario, [...rows].sort((a, b) => a - b)] as const];
+    }),
+  );
 }
 
 /** The settings of a run that its results depend on. A resumed run keeps each of them. */

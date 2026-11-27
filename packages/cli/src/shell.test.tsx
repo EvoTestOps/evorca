@@ -9,6 +9,7 @@ import { act } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import packageJson from "../package.json" with { type: "json" };
 import { palette } from "./parts.js";
+import { parseRows } from "./runs.js";
 import { Shell, type Bench } from "./shell.js";
 
 const wordmark = [
@@ -352,7 +353,7 @@ describe("/benchmark", () => {
     return act(() => setup.dispose());
   });
 
-  async function openWithData() {
+  async function openWithData(width = 120, height = 30, bankTasks = ["task_2", "task_6"]) {
     const root = await mkdtemp(join(tmpdir(), "evorca-shell-"));
     const query = (indices: readonly string[]) =>
       [
@@ -367,7 +368,7 @@ describe("/benchmark", () => {
       join(root, "data", "telecom", "query.csv"),
       query(["task_1", "task_4", "task_7"]),
     );
-    await writeFile(join(root, "data", "bank", "query.csv"), query(["task_2", "task_6"]));
+    await writeFile(join(root, "data", "bank", "query.csv"), query(bankTasks));
     bench = {
       dataDir: join(root, "data"),
       runsDir: join(root, "runs"),
@@ -387,7 +388,7 @@ describe("/benchmark", () => {
           });
         }),
     };
-    await open(120, 30);
+    await open(width, height);
   }
 
   async function show(): Promise<string> {
@@ -468,6 +469,83 @@ describe("/benchmark", () => {
       /command +EVORCA_SEED=\d+ pnpm evorca evaluate --benchmark=openrca --agent=random --scenario=bank --scenario=telecom --rows=telecom:0,1 --runs=2 *\n/,
     );
   });
+
+  it("says to choose a task on a line of its own when the tasks fill the step", async () => {
+    await openWithData(120, 14);
+    await enter("/benchmark");
+    await until("Scenarios");
+    await keys(" ", "down", " ", "enter");
+    const frame = await keys(" ", "down", "down", "down", " ", "enter");
+
+    expect(frame).toMatch(/\n +Choose a task\. *\n/);
+    expect(frame).toMatch(/› • telecom +0 of 3 tasks *\n/);
+    expect(frame).toMatch(/ • +000 +task_1 +easy +Find the cause of failure 0\. *\n/);
+  });
+
+  it("keeps the last task in view when the cursor reaches it", async () => {
+    await openWithData(120, 14);
+    await enter("/benchmark");
+    await until("Scenarios");
+    await keys(" ", "down", " ", "enter");
+    const frame = await keys("down", "down", "down", "down", "down", "down");
+
+    expect(frame).toMatch(/› • +002 +task_7 +hard +Find the cause of failure 2\. *\n/);
+  });
+
+  it.each([80, 100, 120])(
+    "shows and logs a command with many rows that runs the pick when copied from %i columns",
+    async (width) => {
+      const wordsAfter = (frame: string, label: RegExp) => {
+        const lines = frame.split("\n");
+        const first = lines.findIndex((line) => label.test(line));
+        const end = lines.findIndex((line, index) => index > first && !/^ {12}/.test(line));
+        const copied = [lines[first]?.replace(label, "") ?? "", ...lines.slice(first + 1, end)];
+        return copied
+          .map((line) => line.trim())
+          .join("\n")
+          .replaceAll("\\\n", "")
+          .split(/\s+/)
+          .filter((word) => word !== "");
+      };
+      const indices = ["task_1", "task_4", "task_7"] as const;
+      await openWithData(
+        width,
+        30,
+        Array.from({ length: 90 }, (_, row) => indices[row % 3] ?? "task_1"),
+      );
+      await enter("/benchmark");
+      await until("Scenarios");
+      await keys(" ", "enter");
+      await keys("e", "enter");
+      const shown = wordsAfter(await keys("down", "right", "enter"), /^ +command /);
+      await keys("enter");
+      await act(async () => finish(true));
+      const logged = wordsAfter(
+        await until("telecom: 2 answered"),
+        /^.*Running the evaluation that this command repeats:/,
+      );
+
+      for (const words of [shown, logged]) {
+        expect(words.filter((word) => !word.startsWith("--rows="))).toEqual([
+          expect.stringMatching(/^EVORCA_SEED=\d+$/),
+          "pnpm",
+          "evorca",
+          "evaluate",
+          "--benchmark=openrca",
+          "--agent=random",
+          "--scenario=bank",
+          "--runs=2",
+        ]);
+        expect(
+          parseRows(
+            words.filter((word) => word.startsWith("--rows=")).map((word) => word.slice(7)),
+            ["bank"],
+          ),
+        ).toEqual(request?.rows);
+      }
+      expect(request?.rows.get("bank")).toHaveLength(60);
+    },
+  );
 
   it("runs the pick in the view of a run, then logs the command and what the run printed", async () => {
     await confirmRun();

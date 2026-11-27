@@ -89,6 +89,8 @@ const voices: Readonly<Record<Entry["role"], Voice>> = {
   evorca: { speaker: palette.muted, text: palette.text },
 };
 const speakerWidth = Math.max(...Object.keys(voices).map((role) => role.length));
+const timeWidth = 8;
+const entryGap = 2;
 const inks: Readonly<Record<Led, string>> = {
   off: palette.border,
   dim: palette.muted,
@@ -247,7 +249,8 @@ export function Shell({ directory, wallTime, bench, onExit }: ShellProps) {
   }
 
   async function runPlan(plan: Plan) {
-    append(`Running the evaluation that this command repeats:\n${commandOf(plan)}`);
+    const room = width - 2 * gutter - timeWidth - speakerWidth - 2 * entryGap;
+    append(`Running the evaluation that this command repeats:\n${commandOf(plan, room)}`);
     const { read, onRun } = followRuns({ ...bench, scenarios: plan.scenarios });
     const run: Run = { read, stop: new AbortController(), entries: [], exit: "no" };
     setScreen({ kind: "run", run });
@@ -384,11 +387,11 @@ const Transcript = memo(function Transcript({ entries }: { readonly entries: rea
           <box
             key={index}
             flexDirection="row"
-            gap={2}
+            gap={entryGap}
             marginTop={entry.role === "you" && index > 0 ? 1 : 0}
           >
             <text fg={palette.muted} flexShrink={0}>
-              {entry.at.toTimeString().slice(0, 8)}
+              {entry.at.toTimeString().slice(0, timeWidth)}
             </text>
             <text fg={voice.speaker} flexShrink={0}>
               {entry.role.padEnd(speakerWidth)}

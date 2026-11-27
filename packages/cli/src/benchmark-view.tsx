@@ -82,7 +82,9 @@ const hints: Readonly<Record<Step, readonly (readonly [string, string])[]>> = {
     ["esc", "back"],
   ],
 };
-const chrome = 7;
+const chrome = 8;
+const labelWidth = 8;
+const labelGap = 2;
 
 /** The picker, from its first step to the confirmed run. */
 export function BenchmarkPicker({ catalog, seed, onCancel, onStart }: BenchmarkPickerProps) {
@@ -99,7 +101,8 @@ export function BenchmarkPicker({ catalog, seed, onCancel, onStart }: BenchmarkP
   });
 
   const items = itemsOf(picker, catalog);
-  const size = Math.max(1, height - chrome);
+  const blocker = blockerOf(picker, catalog);
+  const size = Math.max(1, height - chrome - (blocker === undefined ? 0 : 1));
   const start = Math.max(0, Math.min(items.length - size, picker.cursor - Math.floor(size / 2)));
   const step = Object.keys(titles).indexOf(picker.step) + 1;
   return (
@@ -110,7 +113,7 @@ export function BenchmarkPicker({ catalog, seed, onCancel, onStart }: BenchmarkP
       </text>
       <box flexDirection="column" flexGrow={1} marginTop={1}>
         {picker.step === "confirm" ? (
-          <Confirm plan={planOf(picker, catalog)} catalog={catalog} />
+          <Confirm plan={planOf(picker, catalog)} catalog={catalog} width={width - 2 * gutter} />
         ) : (
           items
             .slice(start, start + size)
@@ -120,7 +123,7 @@ export function BenchmarkPicker({ catalog, seed, onCancel, onStart }: BenchmarkP
         )}
       </box>
       <text fg={palette.muted} flexShrink={0}>
-        {blockerOf(picker, catalog) ?? ""}
+        {blocker ?? ""}
       </text>
       <box border={["top"]} borderColor={palette.border} flexShrink={0}>
         <Hints hints={hints[picker.step]} width={width - 2 * gutter} />
@@ -165,7 +168,15 @@ function partsOf(item: Item): readonly [dot: string, text: string, note: string]
   }
 }
 
-function Confirm({ plan, catalog }: { readonly plan: Plan; readonly catalog: Catalog }) {
+function Confirm({
+  plan,
+  catalog,
+  width,
+}: {
+  readonly plan: Plan;
+  readonly catalog: Catalog;
+  readonly width: number;
+}) {
   const estimate = estimateOf(plan, catalog);
   const scenarios = plan.scenarios.map((scenario) => {
     const whole = catalog.scenarios.find((data) => data.scenario === scenario)?.tasks.length;
@@ -187,14 +198,14 @@ function Confirm({ plan, catalog }: { readonly plan: Plan; readonly catalog: Cat
               : `about $${estimate.usd.toFixed(2)}, at $${estimate.perTaskUsd.toFixed(4)} per task over ${estimate.from} tasks of finished runs`,
           ],
         ] as const)),
-    ["command", commandOf(plan)],
+    ["command", commandOf(plan, width - labelWidth - labelGap)],
   ];
   return (
     <box flexDirection="column">
       {facts.map(([label, value]) => (
-        <box key={label} flexDirection="row" gap={2}>
+        <box key={label} flexDirection="row" gap={labelGap}>
           <text fg={palette.muted} flexShrink={0}>
-            {label.padEnd(8)}
+            {label.padEnd(labelWidth)}
           </text>
           <text fg={label === "command" ? palette.bright : palette.text}>{value}</text>
         </box>

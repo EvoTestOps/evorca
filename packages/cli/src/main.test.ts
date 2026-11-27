@@ -67,6 +67,7 @@ describe("evorca evaluate", () => {
     ["--jobs=two", "--jobs must be a positive integer"],
     ["--rows=0,,7", "--rows must list row numbers"],
     ["--rows=-1", "--rows must list row numbers"],
+    ["--rows=1,1", "--rows gives row 1 twice."],
     ["--runs=0", "--runs must be a positive integer"],
   ])("exits with code 1 for %s", async (flag, message) => {
     const { code, stderr } = await evorca(

@@ -211,6 +211,20 @@ describe("commandOf", () => {
       "  --budget-usd=50 --task-budget-usd=2",
     ]);
   });
+
+  it("splits the rows of a scenario over several --rows values, so no line is wider than asked", () => {
+    const rows = Array.from({ length: 100 }, (_, index) => 2 * index);
+    const plan = { ...planOf(bothChosen, catalog), rows: new Map([["telecom", rows] as const]) };
+    const lines = commandOf(plan, 60).split("\n");
+    const values = oneLine(lines.join("\n"))
+      .split(" ")
+      .filter((flag) => flag.startsWith("--rows="))
+      .map((flag) => flag.slice("--rows=".length));
+
+    expect(Math.max(...lines.map((line) => line.length))).toBeLessThanOrEqual(60);
+    expect(lines.slice(0, -1).every((line) => line.endsWith(" \\"))).toBe(true);
+    expect(parseRows(values, plan.scenarios)).toEqual(plan.rows);
+  });
 });
 
 describe("estimateOf", () => {
