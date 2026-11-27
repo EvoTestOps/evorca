@@ -61,10 +61,6 @@ After the last tool call, at 80% of the budget, or at 80% of the time, the agent
 
 The model proxy ends a request after 15 minutes with a 504, which ends the task as an API error. The agent waits 16 minutes for each response, because the SDK retries a request that it times out, and the proxy may still serve that request. 32,000 output tokens is the most that the SDK, at its planning rate of 128,000 tokens an hour, expects to finish in 15 minutes.
 
-## Results
-
-On the 51 tasks of OpenRCA's `telecom` scenario, with `claude-sonnet-5` at effort `high`, the agent scores 42.81% strict accuracy and 56.72% partial accuracy, the mean of six runs. [`results/openrca/telecom/`](../../results/openrca/telecom/README.md) holds the runs, the spread, and the commands that print the tables and make the runs again.
-
 ## Update the background
 
 ```sh
