@@ -19,7 +19,8 @@
  * SIGTERM, it stops the run and exits with 130 or 143. `evorca report` prints
  * the summary of finished runs from those folders. `evorca watch` shows a run
  * full screen while it runs, from its folder, and follows the newest run
- * without a run ID.
+ * without a run ID. With the ID of a run that does not exist, it exits with
+ * code 1.
  *
  * The command takes the real API key from `ANTHROPIC_API_KEY` and then deletes
  * the variable, so no Docker command, container, or evaluator that it starts
@@ -41,6 +42,7 @@ import { evaluateOpenRca, reproduceOpenRca } from "./openrca.js";
 import { reportRuns } from "./report.js";
 import { isRunId, parseRows } from "./runs.js";
 import { stopOnSignals } from "./stop.js";
+import { missingRun } from "./watch-folder.js";
 
 const apiKey = process.env.ANTHROPIC_API_KEY;
 delete process.env.ANTHROPIC_API_KEY;
@@ -135,6 +137,9 @@ const commands = {
     if (!(await benchmark.report({ scenarios, runIds, runsDir }))) process.exitCode = 1;
   },
   async watch({ scenarios, runIds: [runId], dataDir, runsDir }: Invocation) {
+    const missing =
+      runId === undefined ? undefined : await missingRun({ runsDir, scenarios }, runId);
+    if (missing !== undefined) fail(missing);
     if (!process.stdin.isTTY || !process.stdout.isTTY) {
       fail("evorca watch needs an interactive terminal.");
     }

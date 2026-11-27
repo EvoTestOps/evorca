@@ -170,6 +170,14 @@ describe("the header", () => {
     expect(spentUsd(stateOf({ usd: 1.5, running }))).toBe(1.875);
   });
 
+  it("has no cost for a run whose agent calls no model", () => {
+    const state = stateOf({ running: new Map([[3, 0]]) });
+    const unpriced = { ...state, record: { ...state.record, model: null, usage: null } };
+
+    expect(spentUsd(unpriced)).toBeUndefined();
+    expect(boardOf(unpriced)[3]?.state).toEqual({ kind: "running", costUsd: undefined });
+  });
+
   it("counts the outcomes, most common first", () => {
     const tasks = [
       taskRecord(0, "timeout", 1),
