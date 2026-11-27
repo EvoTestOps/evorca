@@ -51,6 +51,8 @@ export type RunFolders = {
   readonly runId: () => string | undefined;
 };
 
+const newestListed = 3;
+
 /**
  * Returns a function that reads the run and the trajectory of the task that a
  * selection picks. Calls run one after another, never at the same time.
@@ -117,6 +119,22 @@ export function readRunFolders(folders: RunFolders): (selection: Selection) => P
   };
 }
 
+/**
+ * Returns undefined when the run `runId` has a `run.json` in the folder of one
+ * of `scenarios`. Otherwise it returns a message that names the run, the
+ * folder of the runs, and the newest runs that the folder does hold.
+ */
+export async function missingRun(
+  { runsDir, scenarios }: Pick<RunFolders, "runsDir" | "scenarios">,
+  runId: string,
+): Promise<string | undefined> {
+  if ((await readRuns(runsDir, runId, scenarios)).size > 0) return undefined;
+  const newest = (await runIdsIn(runsDir, scenarios)).slice(-newestListed).reverse();
+  const found =
+    newest.length === 0 ? "It holds no run." : `The newest runs there: ${newest.join(", ")}.`;
+  return `No run ${runId} in ${runsDir} for ${scenarios.join(", ")}. ${found}`;
+}
+
 class LineTail {
   #offset = 0;
   #inode: number | undefined;
@@ -156,7 +174,7 @@ class LineTail {
 }
 
 async function locate({ runsDir, scenarios, runId }: RunFolders) {
-  const id = runId() ?? (await newestRunId(runsDir, scenarios));
+  const id = runId() ?? (await runIdsIn(runsDir, scenarios)).at(-1);
   if (id === undefined) return undefined;
   const records = await readRuns(runsDir, id, scenarios);
   const runs = await Array.fromAsync(records, async ([scenario, record]) => {
@@ -169,18 +187,13 @@ async function locate({ runsDir, scenarios, runId }: RunFolders) {
   return unscored.find(({ running }) => running.length > 0) ?? unscored[0] ?? runs.at(-1);
 }
 
-async function newestRunId(
-  runsDir: string,
-  scenarios: readonly OpenRcaScenario[],
-): Promise<string | undefined> {
+async function runIdsIn(runsDir: string, scenarios: readonly OpenRcaScenario[]): Promise<string[]> {
   const ids = await Array.fromAsync(scenarios, (scenario) =>
     readdir(join(runsDir, scenario)).catch(ifMissing([])),
   );
-  return ids
-    .flat()
-    .filter(isRunId)
-    .sort((a, b) => a.localeCompare(b, "en", { numeric: true }))
-    .at(-1);
+  return [...new Set(ids.flat().filter(isRunId))].sort((a, b) =>
+    a.localeCompare(b, "en", { numeric: true }),
+  );
 }
 
 async function taskRows(folder: string): Promise<number[]> {

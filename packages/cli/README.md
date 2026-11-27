@@ -327,7 +327,7 @@ Each line of `requests.jsonl` is one request. A forwarded request has the time `
 pnpm evorca watch --benchmark=openrca --scenario=telecom
 ```
 
-Without a run ID, the view follows the newest run of the scenario. When a run of a `--runs` series ends, the view moves to the next run as soon as its folder appears. It then shows the live task of that run. With a run ID, it shows only that run, finished or not. Of a run that covers several scenarios, it shows the scenario with running tasks. It needs a terminal, and it exits with code 1 without one.
+Without a run ID, the view follows the newest run of the scenario. When a run of a `--runs` series ends, the view moves to the next run as soon as its folder appears. It then shows the live task of that run. With a run ID, it shows only that run, finished or not. For a run ID that no run in those folders has, it prints the newest runs there and exits with code 1. Of a run that covers several scenarios, it shows the scenario with running tasks. It needs a terminal, and it exits with code 1 without one.
 
 The header gives the run of the series, the scenario, the run ID, the model and its effort, the tasks done of the run's tasks, the count of each outcome, what the run has spent against its budget, and the elapsed time, or the time since the last resume. While tasks remain, it estimates the time left from the mean time of a finished task and the number of tasks at a time. It shows the strict and partial accuracy only once the run is scored.
 

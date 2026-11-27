@@ -2,7 +2,7 @@ import { readdir, rm, stat, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { RunRecord } from "./runs.js";
-import { readRunFolders, type Frame } from "./watch-folder.js";
+import { missingRun, readRunFolders, type Frame } from "./watch-folder.js";
 import {
   bash,
   response,
@@ -227,3 +227,37 @@ async function snapshot(dir: string) {
     }),
   );
 }
+
+describe("missingRun", () => {
+  const scenarios = ["telecom", "bank"] as const;
+
+  it("finds a run in the folder of any scenario", async () => {
+    const { runsDir, writeRun } = await runsFolder();
+    await writeRun(member(1, { scenario: "bank" }));
+
+    expect(await missingRun({ runsDir, scenarios }, "20261118T094052Z-react-1")).toBeUndefined();
+  });
+
+  it("names the run, the folder, and the newest runs for a run ID that no run has", async () => {
+    const { runsDir, writeRun } = await runsFolder();
+    for (const run of [1, 2, 9, 10]) await writeRun(member(run));
+    await writeRun(member(10, { scenario: "bank" }));
+
+    const message = await missingRun({ runsDir, scenarios }, "20261118T094052Z-react-11");
+
+    expect(message).toContain("No run 20261118T094052Z-react-11");
+    expect(message).toContain(runsDir);
+    expect(message).toContain(
+      "20261118T094052Z-react-10, 20261118T094052Z-react-9, 20261118T094052Z-react-2.",
+    );
+    expect(message).not.toContain("20261118T094052Z-react-1,");
+  });
+
+  it("says so when the folder holds no run", async () => {
+    const { runsDir } = await runsFolder();
+
+    expect(await missingRun({ runsDir, scenarios }, "20261118T094052Z-react")).toContain(
+      "holds no run",
+    );
+  });
+});
