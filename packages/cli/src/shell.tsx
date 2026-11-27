@@ -59,7 +59,8 @@ type Draft =
   | { readonly kind: "empty"; readonly typingFrom: number; readonly firstExample: number }
   | { readonly kind: "text"; readonly nextExample: number };
 
-const gutter = 2;
+/** The space in columns between the edge of the screen and the content. */
+export const gutter = 2;
 const promptWidth = 75;
 const tagline = "autonomous incident investigation";
 const version = `evorca v${packageJson.version}`;
@@ -207,7 +208,7 @@ export function Shell({ directory, wallTime, onExit }: ShellProps) {
               onSubmit={onSubmit}
             />
           </box>
-          <Hints width={width - 2 * gutter} />
+          <Hints hints={hints} width={width - 2 * gutter} />
         </box>
         {home ? <box flexGrow={1} /> : null}
       </box>
@@ -219,14 +220,7 @@ export function Shell({ directory, wallTime, onExit }: ShellProps) {
 const Masthead = memo(function Masthead({ wordmarkAt }: { readonly wordmarkAt: number | null }) {
   return (
     <box flexDirection="column" alignItems="center" flexShrink={0}>
-      {wordmarkAt === null ? (
-        <text attributes={TextAttributes.BOLD}>
-          <span fg={palette.muted}>evo</span>
-          <span fg={palette.bright}>rca</span>
-        </text>
-      ) : (
-        <Wordmark t={wordmarkAt} />
-      )}
+      {wordmarkAt === null ? <Mark /> : <Wordmark t={wordmarkAt} />}
       <text fg={palette.muted} marginTop={1}>
         {tagline}
       </text>
@@ -282,7 +276,27 @@ const Transcript = memo(function Transcript({ entries }: { readonly entries: rea
   );
 });
 
-function Hints({ width }: { readonly width: number }) {
+/** The name evorca in bold, with `evo` dimmer than `rca`. */
+export function Mark() {
+  return (
+    <text attributes={TextAttributes.BOLD}>
+      <span fg={palette.muted}>evo</span>
+      <span fg={palette.bright}>rca</span>
+    </text>
+  );
+}
+
+/**
+ * A line of keys and what they do. When the line is wider than `width`, it
+ * drops hints from the start until it fits.
+ */
+export function Hints({
+  hints,
+  width,
+}: {
+  readonly hints: readonly (readonly [string, string])[];
+  readonly width: number;
+}) {
   const shown = hints.filter((_, index) => hintsWidth(hints.slice(index)) <= width);
   return (
     <text flexShrink={0}>
@@ -296,7 +310,14 @@ function Hints({ width }: { readonly width: number }) {
   );
 }
 
-function Footer({ directory, width }: { readonly directory: string; readonly width: number }) {
+/** The bottom line: `directory`, shortened to fit `width`, and the version. */
+export function Footer({
+  directory,
+  width,
+}: {
+  readonly directory: string;
+  readonly width: number;
+}) {
   return (
     <box flexDirection="row" paddingX={gutter} paddingY={1} flexShrink={0}>
       <text fg={palette.muted}>{shorten(directory, width - 2 * gutter - version.length - 2)}</text>
