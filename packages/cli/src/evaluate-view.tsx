@@ -84,6 +84,10 @@ export async function evaluateFullScreen<T>(
 ): Promise<T> {
   const lines: LogLine[] = [];
   const { read, onRun } = followRuns(folders);
+  // Node queued a warning when OpenTUI loaded FFI, and the renderer prints
+  // every warning that comes while it listens, also one that Node was told
+  // to hide. So the queued warning goes out first, to Node alone.
+  await new Promise<void>((resolve) => process.nextTick(resolve));
   const renderer = await createCliRenderer({
     exitOnCtrlC: false,
     exitSignals: [],

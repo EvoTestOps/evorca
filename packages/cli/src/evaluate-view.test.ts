@@ -1,4 +1,7 @@
+import { execFile } from "node:child_process";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import { describe, expect, it } from "vitest";
 import { captureConsole, followRuns, type LogLine } from "./evaluate-view.js";
 import { runRecord, runsFolder } from "./watch-fixtures.js";
@@ -38,5 +41,32 @@ describe("followRuns", () => {
       kind: "run",
       state: { record: { runId: "20261118T094052Z-react" } },
     });
+  });
+});
+
+describe("evaluateFullScreen", () => {
+  it("prints only the lines of the run once the view closes", async () => {
+    const command = `
+      import { evaluateFullScreen } from "./src/evaluate-view.tsx";
+      const folders = { runsDir: "no-runs", dataDir: "no-data", scenarios: ["telecom"] };
+      await evaluateFullScreen(folders, async () => {
+        console.log("telecom: 2 answered");
+        console.error("Stopped.");
+      });
+    `;
+    const flags = [
+      "--experimental-ffi",
+      "--disable-warning=ExperimentalWarning",
+      "--import",
+      "tsx",
+    ];
+    const { stdout, stderr } = await promisify(execFile)(
+      process.execPath,
+      [...flags, "--input-type=module", "-e", command],
+      { cwd: fileURLToPath(new URL("..", import.meta.url)) },
+    );
+
+    expect(stdout.endsWith("telecom: 2 answered\n")).toBe(true);
+    expect(stderr).toBe("Stopped.\n");
   });
 });
