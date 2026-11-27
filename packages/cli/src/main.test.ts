@@ -162,6 +162,22 @@ describe("evorca report", () => {
   });
 });
 
+describe("evorca watch", () => {
+  it("exits with code 1 and names the run and its folder for a run ID that no run has", async () => {
+    const runId = "20000101T000000Z-random";
+    const { code, stderr } = await evorca(
+      "watch",
+      "--benchmark=openrca",
+      "--scenario=telecom",
+      runId,
+    );
+
+    expect(code).toBe(1);
+    expect(stderr).toContain(`No run ${runId} in `);
+    expect(stderr).toContain(join("data", "runs", "openrca"));
+  });
+});
+
 describe("evorca fetch", () => {
   it("exits with code 1 and lists the archives and their sizes for an --archive that is none of them", async () => {
     const downloads = await mkdtemp(join(tmpdir(), "evorca-downloads-"));
