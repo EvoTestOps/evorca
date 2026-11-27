@@ -34,6 +34,10 @@ pnpm check
 | [`@evorca/core`](packages/core/README.md)         | The domain types that every other package shares.                                 |
 | [`@evorca/openrca`](packages/openrca/README.md)   | Connects evorca to the [OpenRCA](https://github.com/microsoft/OpenRCA) benchmark. |
 
+## Results
+
+[`results/`](results/openrca/telecom/README.md) holds the scored runs behind each reported number and the commands that print the tables again. On the 51 tasks of OpenRCA's `telecom` scenario, the `react` baseline with `claude-sonnet-5` scores 42.81% strict accuracy, the mean of six runs.
+
 ## Contributing
 
 Open an [Issue](https://github.com/EvoTestOps/evorca/issues) to start a conversation, and read [CONTRIBUTING.md](CONTRIBUTING.md) before working on code. Report security issues privately as described in [SECURITY.md](SECURITY.md).

@@ -1,0 +1,281 @@
+{
+  "summary": {
+    "easy": {
+      "tasks": 24,
+      "strict": 0.4166666666666667,
+      "partial": 0.4166666666666667
+    },
+    "middle": {
+      "tasks": 18,
+      "strict": 0.3333333333333333,
+      "partial": 0.6666666666666666
+    },
+    "hard": {
+      "tasks": 9,
+      "strict": 0.3333333333333333,
+      "partial": 0.6677777777777778
+    },
+    "total": {
+      "tasks": 51,
+      "strict": 0.37254901960784315,
+      "partial": 0.5492156862745098
+    }
+  },
+  "scores": [
+    {
+      "row": 0,
+      "taskIndex": "task_2",
+      "score": 1
+    },
+    {
+      "row": 1,
+      "taskIndex": "task_4",
+      "score": 0.5
+    },
+    {
+      "row": 2,
+      "taskIndex": "task_2",
+      "score": 0
+    },
+    {
+      "row": 3,
+      "taskIndex": "task_2",
+      "score": 1
+    },
+    {
+      "row": 4,
+      "taskIndex": "task_7",
+      "score": 1
+    },
+    {
+      "row": 5,
+      "taskIndex": "task_1",
+      "score": 1
+    },
+    {
+      "row": 6,
+      "taskIndex": "task_4",
+      "score": 1
+    },
+    {
+      "row": 7,
+      "taskIndex": "task_7",
+      "score": 0.67
+    },
+    {
+      "row": 8,
+      "taskIndex": "task_5",
+      "score": 0.5
+    },
+    {
+      "row": 9,
+      "taskIndex": "task_1",
+      "score": 0
+    },
+    {
+      "row": 10,
+      "taskIndex": "task_1",
+      "score": 1
+    },
+    {
+      "row": 11,
+      "taskIndex": "task_6",
+      "score": 0.5
+    },
+    {
+      "row": 12,
+      "taskIndex": "task_7",
+      "score": 0.67
+    },
+    {
+      "row": 13,
+      "taskIndex": "task_1",
+      "score": 0
+    },
+    {
+      "row": 14,
+      "taskIndex": "task_1",
+      "score": 1
+    },
+    {
+      "row": 15,
+      "taskIndex": "task_7",
+      "score": 0.67
+    },
+    {
+      "row": 16,
+      "taskIndex": "task_7",
+      "score": 1
+    },
+    {
+      "row": 17,
+      "taskIndex": "task_2",
+      "score": 0
+    },
+    {
+      "row": 18,
+      "taskIndex": "task_2",
+      "score": 1
+    },
+    {
+      "row": 19,
+      "taskIndex": "task_4",
+      "score": 0.5
+    },
+    {
+      "row": 20,
+      "taskIndex": "task_2",
+      "score": 0
+    },
+    {
+      "row": 21,
+      "taskIndex": "task_7",
+      "score": 1
+    },
+    {
+      "row": 22,
+      "taskIndex": "task_4",
+      "score": 1
+    },
+    {
+      "row": 23,
+      "taskIndex": "task_1",
+      "score": 1
+    },
+    {
+      "row": 24,
+      "taskIndex": "task_2",
+      "score": 0
+    },
+    {
+      "row": 25,
+      "taskIndex": "task_4",
+      "score": 0.5
+    },
+    {
+      "row": 26,
+      "taskIndex": "task_3",
+      "score": 0
+    },
+    {
+      "row": 27,
+      "taskIndex": "task_7",
+      "score": 0.67
+    },
+    {
+      "row": 28,
+      "taskIndex": "task_7",
+      "score": 0.33
+    },
+    {
+      "row": 29,
+      "taskIndex": "task_4",
+      "score": 1
+    },
+    {
+      "row": 30,
+      "taskIndex": "task_3",
+      "score": 0
+    },
+    {
+      "row": 31,
+      "taskIndex": "task_4",
+      "score": 0.5
+    },
+    {
+      "row": 32,
+      "taskIndex": "task_6",
+      "score": 0.5
+    },
+    {
+      "row": 33,
+      "taskIndex": "task_6",
+      "score": 1
+    },
+    {
+      "row": 34,
+      "taskIndex": "task_7",
+      "score": 0
+    },
+    {
+      "row": 35,
+      "taskIndex": "task_6",
+      "score": 0.5
+    },
+    {
+      "row": 36,
+      "taskIndex": "task_4",
+      "score": 1
+    },
+    {
+      "row": 37,
+      "taskIndex": "task_2",
+      "score": 1
+    },
+    {
+      "row": 38,
+      "taskIndex": "task_2",
+      "score": 0
+    },
+    {
+      "row": 39,
+      "taskIndex": "task_3",
+      "score": 0
+    },
+    {
+      "row": 40,
+      "taskIndex": "task_2",
+      "score": 1
+    },
+    {
+      "row": 41,
+      "taskIndex": "task_1",
+      "score": 0
+    },
+    {
+      "row": 42,
+      "taskIndex": "task_5",
+      "score": 0.5
+    },
+    {
+      "row": 43,
+      "taskIndex": "task_6",
+      "score": 0.5
+    },
+    {
+      "row": 44,
+      "taskIndex": "task_5",
+      "score": 0.5
+    },
+    {
+      "row": 45,
+      "taskIndex": "task_1",
+      "score": 0
+    },
+    {
+      "row": 46,
+      "taskIndex": "task_6",
+      "score": 0.5
+    },
+    {
+      "row": 47,
+      "taskIndex": "task_3",
+      "score": 1
+    },
+    {
+      "row": 48,
+      "taskIndex": "task_1",
+      "score": 0
+    },
+    {
+      "row": 49,
+      "taskIndex": "task_1",
+      "score": 0
+    },
+    {
+      "row": 50,
+      "taskIndex": "task_5",
+      "score": 1
+    }
+  ]
+}
