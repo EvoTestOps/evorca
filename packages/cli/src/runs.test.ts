@@ -88,8 +88,8 @@ describe("conflicts", () => {
 describe("parseRows", () => {
   const scenarios = ["bank", "telecom", "market-cloudbed-1"] as const;
 
-  it("gives every scenario the rows of a value without a scenario, in order and without repeats", () => {
-    expect(parseRows(["21,0,7,0"], scenarios)).toEqual(
+  it("gives every scenario the rows of a value without a scenario, in order", () => {
+    expect(parseRows(["21,0,7"], scenarios)).toEqual(
       new Map([
         ["bank", [0, 7, 21]],
         ["telecom", [0, 7, 21]],
@@ -117,11 +117,39 @@ describe("parseRows", () => {
     );
   });
 
-  it("refuses a value of another form, a scenario outside the run, and rows given twice", () => {
-    for (const values of [["0,,7"], ["telecom:"], ["x"], ["telecom:1", "telecom:2"], ["1", "2"]]) {
+  it("adds up the rows of the values for one scenario, and of the values without a scenario", () => {
+    expect(parseRows(["telecom:7,3", "21", "telecom:1", "0"], scenarios)).toEqual(
+      new Map([
+        ["telecom", [1, 3, 7]],
+        ["bank", [0, 21]],
+        ["market-cloudbed-1", [0, 21]],
+      ]),
+    );
+  });
+
+  it("refuses a value of another form and a scenario outside the run", () => {
+    for (const values of [["0,,7"], ["telecom:"], ["x"]]) {
       expect(parseRows(values, scenarios)).toEqual(expect.any(String));
     }
     expect(parseRows(["market-cloudbed-2:0"], scenarios)).toContain("market-cloudbed-2");
+  });
+
+  it("refuses a row given twice, and names the row and its scenario", () => {
+    expect(parseRows(["1,1"], scenarios)).toBe("--rows gives row 1 twice.");
+    expect(parseRows(["0,7", "3,7"], scenarios)).toBe("--rows gives row 7 twice.");
+    expect(parseRows(["telecom:2,5,2"], scenarios)).toBe("--rows gives row 2 of telecom twice.");
+    expect(parseRows(["telecom:1,2", "bank:2", "telecom:2"], scenarios)).toBe(
+      "--rows gives row 2 of telecom twice.",
+    );
+  });
+
+  it("lets a value without a scenario and a value for a scenario give the same row", () => {
+    expect(parseRows(["1", "bank:1"], ["bank", "telecom"])).toEqual(
+      new Map([
+        ["bank", [1]],
+        ["telecom", [1]],
+      ]),
+    );
   });
 });
 
