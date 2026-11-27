@@ -287,6 +287,7 @@ function Header({
   const started = Date.parse(resumed?.startedAt ?? record.startedAt);
   const ended = record.endedAt === null ? now : Date.parse(record.endedAt);
   const left = record.endedAt === null ? secondsLeft(board, jobs) : undefined;
+  const spent = spentUsd(state);
   const run: Fact[] = [
     [record.scenario, ""],
     ...(series === undefined ? [] : [[`run ${series.run}`, `of ${series.runs}`] as const]),
@@ -296,7 +297,9 @@ function Header({
   const progress: Fact[] = [
     [`${done}/${board.length}`, "tasks"],
     ...outcomeCounts(board).map(([outcome, count]): Fact => [String(count), outcome]),
-    [usd(spentUsd(state)), budgetUsd === null ? "spent" : `of ${usd(budgetUsd)}`],
+    ...(spent === undefined
+      ? []
+      : [[usd(spent), budgetUsd === null ? "spent" : `of ${usd(budgetUsd)}`] as const]),
     [
       duration((ended - started) / 1000),
       resumed !== undefined ? "since resume" : record.endedAt === null ? "elapsed" : "in all",
@@ -494,7 +497,7 @@ function stateFacts(task: BoardTask, feed: readonly FeedEntry[], now: number): F
     return [
       ["running", ""],
       ...(started === undefined ? [] : [[duration((now - started) / 1000), ""] as const]),
-      [usd(state.costUsd), ""],
+      ...(state.costUsd === undefined ? [] : [[usd(state.costUsd), ""] as const]),
     ];
   }
   const { outcome, seconds, usage } = state.record;

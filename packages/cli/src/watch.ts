@@ -23,11 +23,11 @@ export type BoardTask = {
 /**
  * Where a task stands. A task is running from when its folder appears until
  * `run.json` records its outcome, and `costUsd` is what its model requests
- * have cost so far.
+ * have cost so far, undefined when the agent of the run calls no model.
  */
 export type TaskState =
   | { readonly kind: "pending" }
-  | { readonly kind: "running"; readonly costUsd: number }
+  | { readonly kind: "running"; readonly costUsd: number | undefined }
   | { readonly kind: "done"; readonly record: TaskRecord };
 
 /**
@@ -100,14 +100,18 @@ export function boardOf({ record, plan, running }: RunState): BoardTask[] {
         done !== undefined
           ? { kind: "done", record: done }
           : costUsd !== undefined
-            ? { kind: "running", costUsd }
+            ? { kind: "running", costUsd: record.model === null ? undefined : costUsd }
             : { kind: "pending" };
       return { row, taskIndex: done?.taskIndex ?? kinds.get(row), state };
     });
 }
 
-/** What the run has spent so far in US dollars: its recorded usage and its running tasks. */
-export function spentUsd({ record, running }: RunState): number {
+/**
+ * What the run has spent so far in US dollars: its recorded usage and its
+ * running tasks. It is undefined when the agent of the run calls no model.
+ */
+export function spentUsd({ record, running }: RunState): number | undefined {
+  if (record.model === null) return undefined;
   return (record.usage?.costUsd ?? 0) + [...running.values()].reduce((sum, cost) => sum + cost, 0);
 }
 
