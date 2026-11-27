@@ -140,7 +140,7 @@ const settings: { readonly [K in keyof Settings]: Setting<Settings[K]> } = {
     change: (usd, by) => Math.max(0.5, usd + 0.5 * by),
   },
 };
-const commandWidth = 72;
+const commandColumns = 72;
 const agentNames = Object.keys(agents).filter((name): name is AgentName => name in agents);
 const modelIds = Object.keys(models).filter((id): id is ModelId => id in models);
 
@@ -312,10 +312,15 @@ export function planOf(picker: Picker, catalog: Catalog): Plan {
 
 /**
  * The command that runs `plan` from a terminal at the repository root. It
- * breaks into lines of at most 72 columns that end in a backslash, so a copy
- * of it runs as it is.
+ * breaks between flags into lines that end in a backslash, so a copy of it
+ * runs as it is. A line takes at most 72 columns, or `room` columns where the
+ * screen has fewer. To fit, the rows of a scenario go in as many `--rows`
+ * values as the lines need.
  */
-export function commandOf(plan: Plan): string {
+export function commandOf(plan: Plan, room: number = commandColumns): string {
+  const columns = Math.min(commandColumns, room);
+  const indent = "  ";
+  const more = " \\";
   const words = [
     `EVORCA_SEED=${plan.seed}`,
     "pnpm",
@@ -324,7 +329,9 @@ export function commandOf(plan: Plan): string {
     "--benchmark=openrca",
     `--agent=${plan.agent}`,
     ...plan.scenarios.map((scenario) => `--scenario=${scenario}`),
-    ...[...plan.rows].map(([scenario, rows]) => `--rows=${scenario}:${rows.join(",")}`),
+    ...[...plan.rows].flatMap(([scenario, rows]) =>
+      rowFlags(scenario, rows, columns - indent.length - more.length),
+    ),
     ...(plan.runs === 1 ? [] : [`--runs=${plan.runs}`]),
     ...(plan.model === undefined ? [] : [`--model=${plan.model}`]),
     ...(plan.effort === undefined ? [] : [`--effort=${plan.effort}`]),
@@ -334,11 +341,11 @@ export function commandOf(plan: Plan): string {
   const lines: string[] = [];
   for (const word of words) {
     const last = lines.at(-1);
-    if (last !== undefined && `${last} ${word} \\`.length <= commandWidth) {
+    if (last !== undefined && `${last} ${word}${more}`.length <= columns) {
       lines[lines.length - 1] = `${last} ${word}`;
-    } else lines.push(last === undefined ? word : `  ${word}`);
+    } else lines.push(last === undefined ? word : `${indent}${word}`);
   }
-  return lines.join(" \\\n");
+  return lines.join(`${more}\n`);
 }
 
 /** How many tasks `plan` runs in each of its runs. */
@@ -383,6 +390,17 @@ function agentProblem(picker: Picker, catalog: Catalog): string | undefined {
     .map((data) => data.scenario);
   if (!agents[agent].needsTelemetry || missing.length === 0) return undefined;
   return `Fetch the telemetry that ${agent} reads with ${fetch(missing)}`;
+}
+
+function rowFlags(scenario: OpenRcaScenario, rows: readonly number[], width: number): string[] {
+  const flags: string[] = [];
+  for (const row of rows) {
+    const last = flags.at(-1);
+    if (last !== undefined && `${last},${row}`.length <= width) {
+      flags[flags.length - 1] = `${last},${row}`;
+    } else flags.push(`--rows=${scenario}:${row}`);
+  }
+  return flags;
 }
 
 function fetch(scenarios: readonly OpenRcaScenario[]): string {

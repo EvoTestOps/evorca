@@ -482,9 +482,31 @@ describe("/benchmark", () => {
     expect(frame).toMatch(/ • +000 +task_1 +easy +Find the cause of failure 0\. *\n/);
   });
 
+  it("keeps the last task in view when the cursor reaches it", async () => {
+    await openWithData(120, 14);
+    await enter("/benchmark");
+    await until("Scenarios");
+    await keys(" ", "down", " ", "enter");
+    const frame = await keys("down", "down", "down", "down", "down", "down");
+
+    expect(frame).toMatch(/› • +002 +task_7 +hard +Find the cause of failure 2\. *\n/);
+  });
+
   it.each([80, 100, 120])(
-    "shows a command with many rows that runs the pick when copied from %i columns",
+    "shows and logs a command with many rows that runs the pick when copied from %i columns",
     async (width) => {
+      const wordsAfter = (frame: string, label: RegExp) => {
+        const lines = frame.split("\n");
+        const first = lines.findIndex((line) => label.test(line));
+        const end = lines.findIndex((line, index) => index > first && !/^ {12}/.test(line));
+        const copied = [lines[first]?.replace(label, "") ?? "", ...lines.slice(first + 1, end)];
+        return copied
+          .map((line) => line.trim())
+          .join("\n")
+          .replaceAll("\\\n", "")
+          .split(/\s+/)
+          .filter((word) => word !== "");
+      };
       const indices = ["task_1", "task_4", "task_7"] as const;
       await openWithData(
         width,
@@ -495,35 +517,32 @@ describe("/benchmark", () => {
       await until("Scenarios");
       await keys(" ", "enter");
       await keys("e", "enter");
-      const frame = await keys("down", "right", "enter");
-      const lines = frame.split("\n");
-      const first = lines.findIndex((line) => /^ +command /.test(line));
-      const last = lines.findIndex((line, index) => index >= first && line.trim() === "");
-      const copied = lines
-        .slice(first, last)
-        .map((line) => line.replace(/^ +command/, "").trim())
-        .join("\n");
-      const words = copied.replaceAll("\\\n", "").split(/\s+/);
+      const shown = wordsAfter(await keys("down", "right", "enter"), /^ +command /);
       await keys("enter");
+      await act(async () => finish(true));
+      const logged = wordsAfter(
+        await until("telecom: 2 answered"),
+        /^.*Running the evaluation that this command repeats:/,
+      );
 
-      expect(words.slice(0, 5)).toEqual([
-        expect.stringMatching(/^EVORCA_SEED=\d+$/),
-        "pnpm",
-        "evorca",
-        "evaluate",
-        "--benchmark=openrca",
-      ]);
-      expect(words.slice(5).filter((word) => !word.startsWith("--rows="))).toEqual([
-        "--agent=random",
-        "--scenario=bank",
-        "--runs=2",
-      ]);
-      expect(
-        parseRows(
-          words.filter((word) => word.startsWith("--rows=")).map((word) => word.slice(7)),
-          ["bank"],
-        ),
-      ).toEqual(request?.rows);
+      for (const words of [shown, logged]) {
+        expect(words.filter((word) => !word.startsWith("--rows="))).toEqual([
+          expect.stringMatching(/^EVORCA_SEED=\d+$/),
+          "pnpm",
+          "evorca",
+          "evaluate",
+          "--benchmark=openrca",
+          "--agent=random",
+          "--scenario=bank",
+          "--runs=2",
+        ]);
+        expect(
+          parseRows(
+            words.filter((word) => word.startsWith("--rows=")).map((word) => word.slice(7)),
+            ["bank"],
+          ),
+        ).toEqual(request?.rows);
+      }
       expect(request?.rows.get("bank")).toHaveLength(60);
     },
   );
