@@ -312,10 +312,12 @@ describe("Watch", () => {
   ])("keeps the task line, the keys, and the footer apart at %i by %i", async (width, height) => {
     await open(finished, height, {}, width);
     await folder.writeScores(finished, 0.4314, 0.5525);
+    await folder.append(finished, 50, "trajectory", taskEvent("40:00", "Find it."));
     const frame = await poll();
     const rows = frame.split("\n").map((row) => row.trim());
 
     expect(rows.every((row) => row.length <= width - 4)).toBe(true);
+    if (height >= 14) expect(frame).toContain("Find it.");
     expect(rows.filter((row) => row.includes("task 050"))).toEqual([
       expect.stringMatching(/^task 050( {3}\S+( \S+)*)* {3,}live {3}tailing$/),
     ]);

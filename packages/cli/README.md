@@ -355,6 +355,8 @@ At first the feed shows the live task: the running task on the lowest row, or el
 | f                             | Show the live task again.                      |
 | q, ctrl+c                     | Quit. The run goes on.                         |
 
+On a small terminal the view shows less: the footer goes under 20 rows, and the keys and the dots under 16 rows, and a narrow task line drops its time and cost.
+
 `evorca watch` reads the folder of the run once a second and never writes to it. It reads each growing file from where the last read stopped, and it waits for the end of a line that the agent is still writing. A task is running from when its folder appears until `run.json` records its outcome, so a task of a run that crashed shows as running. To count the tasks of a run that covers every row, it reads the tasks from `query.csv` without their scoring points.
 
 ## Run an agent in a container

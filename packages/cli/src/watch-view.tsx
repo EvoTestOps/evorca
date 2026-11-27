@@ -7,6 +7,12 @@
  * the thinking summaries, the agent's text, each command and the output that
  * the agent sees, and the answer. Long output folds to a few lines.
  *
+ * A terminal too small for all of it shows less, and never one part over
+ * another. The task line drops facts from its end, and the header drops the
+ * name evorca. Under 20 rows the footer goes, and under 16 rows the keys and
+ * the board go too. Whatever still does not fit is cut at the edge of the
+ * run's part of the screen.
+ *
  * It reads the run folder once a second through `watch-folder.ts` and never
  * changes the run. It draws only the grays of the shell.
  *
@@ -49,6 +55,10 @@ const hints = [
   ["f", "live"],
 ] as const;
 const logLines = 4;
+const compactBelowRows = 16;
+const footerFromRows = 20;
+const factGap = "   ";
+const markWidth = "evorca".length;
 const looks = {
   pending: { glyph: dot, ink: palette.border },
   running: { glyph: dot, ink: palette.bright },
@@ -120,7 +130,7 @@ export function Watch({
   children,
 }: WatchProps) {
   const renderer = useRenderer();
-  const { width } = useTerminalDimensions();
+  const { width, height } = useTerminalDimensions();
   const [selection, setSelection] = useState<Selection>(live);
   const [frame, setFrame] = useState<Frame>({ kind: "waiting", message: "Reading the run…" });
   const [problem, setProblem] = useState<string | undefined>();
@@ -200,47 +210,56 @@ export function Watch({
     .slice(-logLines);
   const lastTurn =
     frame.kind === "run" ? frame.feed.findLastIndex(({ kind }) => kind === "turn") : -1;
+  const inner = Math.max(0, width - 2 * gutter);
+  const compact = height < compactBelowRows;
   return (
     <box flexDirection="column" width="100%" height="100%" backgroundColor={palette.background}>
       <box flexDirection="column" flexGrow={1} paddingX={gutter} paddingTop={1}>
-        {frame.kind === "waiting" ? (
-          <box flexDirection="column" flexGrow={1}>
-            <Mark />
-            <text fg={palette.muted} marginTop={1}>
-              {frame.message}
-            </text>
-          </box>
-        ) : (
-          <>
-            <Header state={frame.state} board={board} now={now} />
-            <Board board={board} row={row} blink={Math.floor(now / pollMs) % 2 === 1} />
-            <TaskLine
-              task={task}
-              feed={frame.feed}
-              live={selection.kind === "live"}
-              tailing={tailing}
-              now={now}
-            />
-            <scrollbox
-              ref={scroll}
-              stickyScroll
-              stickyStart="bottom"
-              scrollbarOptions={{ visible: false }}
-              flexGrow={1}
-              width="100%"
-              marginTop={1}
-            >
-              {frame.feed.map((entry, index) => (
-                <Entry
-                  key={index}
-                  entry={entry}
-                  unfolded={unfolded}
-                  open={running && index > lastTurn}
-                />
-              ))}
-            </scrollbox>
-          </>
-        )}
+        {/* The one part that gives way: it shrinks and clips, so a short terminal
+            cuts the run and never draws it over the lines below. */}
+        <box flexDirection="column" flexGrow={1} flexShrink={1} overflow="hidden">
+          {frame.kind === "waiting" ? (
+            <>
+              <Mark />
+              <text fg={palette.muted} marginTop={1}>
+                {frame.message}
+              </text>
+            </>
+          ) : (
+            <>
+              <Header state={frame.state} board={board} now={now} width={inner} />
+              {compact ? null : (
+                <Board board={board} row={row} blink={Math.floor(now / pollMs) % 2 === 1} />
+              )}
+              <TaskLine
+                task={task}
+                feed={frame.feed}
+                live={selection.kind === "live"}
+                tailing={tailing}
+                now={now}
+                width={inner}
+              />
+              <scrollbox
+                ref={scroll}
+                stickyScroll
+                stickyStart="bottom"
+                scrollbarOptions={{ visible: false }}
+                flexGrow={1}
+                width="100%"
+                marginTop={1}
+              >
+                {frame.feed.map((entry, index) => (
+                  <Entry
+                    key={index}
+                    entry={entry}
+                    unfolded={unfolded}
+                    open={running && index > lastTurn}
+                  />
+                ))}
+              </scrollbox>
+            </>
+          )}
+        </box>
         {logTail.length === 0 ? null : (
           <box flexDirection="column" flexShrink={0} marginTop={1}>
             {logTail.map((line, index) => (
@@ -256,17 +275,21 @@ export function Watch({
           </text>
         )}
         {children}
-        <box border={["top"]} borderColor={palette.border} flexShrink={0} marginTop={1}>
-          <Hints
-            hints={[...hints, onExit === undefined ? ["ctrl+c", "stop"] : ["q", "quit"]]}
-            width={width - 2 * gutter}
-          />
-        </box>
+        {compact ? null : (
+          <box border={["top"]} borderColor={palette.border} flexShrink={0} marginTop={1}>
+            <Hints
+              hints={[...hints, onExit === undefined ? ["ctrl+c", "stop"] : ["q", "quit"]]}
+              width={inner}
+            />
+          </box>
+        )}
       </box>
-      <Footer
-        directory={frame.kind === "run" ? relative(process.cwd(), frame.state.folder) : ""}
-        width={width}
-      />
+      {height < footerFromRows ? null : (
+        <Footer
+          directory={frame.kind === "run" ? relative(process.cwd(), frame.state.folder) : ""}
+          width={width}
+        />
+      )}
     </box>
   );
 }
@@ -275,10 +298,12 @@ function Header({
   state,
   board,
   now,
+  width,
 }: {
   readonly state: RunState;
   readonly board: readonly BoardTask[];
   readonly now: number;
+  readonly width: number;
 }) {
   const { record, scores } = state;
   const { series, model, budgetUsd, jobs } = record;
@@ -314,23 +339,33 @@ function Header({
   ];
   return (
     <box flexDirection="column" flexShrink={0}>
-      <box flexDirection="row" gap={3}>
-        <Mark />
+      {markWidth + factGap.length + factsWidth(run) <= width ? (
+        <box flexDirection="row" gap={factGap.length}>
+          <Mark />
+          <Facts facts={run} />
+        </box>
+      ) : (
         <Facts facts={run} />
-      </box>
+      )}
       <Facts facts={progress} />
     </box>
   );
 }
 
-function Facts({ facts }: { readonly facts: readonly Fact[] }) {
+function Facts({
+  facts,
+  wrap = true,
+}: {
+  readonly facts: readonly Fact[];
+  readonly wrap?: boolean;
+}) {
   return (
-    <text flexShrink={0}>
+    <text flexShrink={0} wrapMode={wrap ? "word" : "none"}>
       {facts.map(([value, label], index) => (
         <span key={index}>
           <span fg={palette.bright}>{value}</span>
           <span fg={palette.muted}>
-            {`${label === "" ? "" : ` ${label}`}${index < facts.length - 1 ? "   " : ""}`}
+            {`${label === "" ? "" : ` ${label}`}${index < facts.length - 1 ? factGap : ""}`}
           </span>
         </span>
       ))}
@@ -370,12 +405,14 @@ function TaskLine({
   live,
   tailing,
   now,
+  width,
 }: {
   readonly task: BoardTask | undefined;
   readonly feed: readonly FeedEntry[];
   readonly live: boolean;
   readonly tailing: boolean;
   readonly now: number;
+  readonly width: number;
 }) {
   const facts: Fact[] =
     task === undefined
@@ -389,11 +426,14 @@ function TaskLine({
     [live ? "live" : "picked", ""],
     tailing ? ["tailing", ""] : ["paused", "end to tail"],
   ];
+  const identity = facts.slice(0, 1);
+  const shownMode = fitFacts(mode, width - factsWidth(identity) - factGap.length);
+  const modeWidth = shownMode.length === 0 ? 0 : factsWidth(shownMode) + factGap.length;
   return (
     <box flexDirection="row" flexShrink={0} marginTop={1}>
-      <Facts facts={facts} />
+      <Facts facts={fitFacts(facts, width - modeWidth)} wrap={false} />
       <box flexGrow={1} />
-      <Facts facts={mode} />
+      <Facts facts={shownMode} wrap={false} />
     </box>
   );
 }
@@ -506,6 +546,21 @@ function stateFacts(task: BoardTask, feed: readonly FeedEntry[], now: number): F
     [`${seconds.toFixed(2)} s`, ""],
     ...(usage === null ? [] : [[usd(usage.costUsd), ""] as const]),
   ];
+}
+
+function factsWidth(facts: readonly Fact[]): number {
+  return (
+    facts.reduce(
+      (sum, [value, label]) => sum + value.length + (label === "" ? 0 : 1 + label.length),
+      0,
+    ) +
+    factGap.length * Math.max(0, facts.length - 1)
+  );
+}
+
+/** The facts from the start of `facts` that fit in `width` columns on one line. */
+function fitFacts(facts: readonly Fact[], width: number): readonly Fact[] {
+  return facts.filter((_, index) => factsWidth(facts.slice(0, index + 1)) <= width);
 }
 
 function duration(seconds: number): string {
