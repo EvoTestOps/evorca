@@ -40,6 +40,7 @@ import { efforts, models } from "./models.js";
 import { evaluateOpenRca, reproduceOpenRca } from "./openrca.js";
 import { reportRuns } from "./report.js";
 import { isRunId, parseRows } from "./runs.js";
+import { stopOnSignals } from "./stop.js";
 
 const apiKey = process.env.ANTHROPIC_API_KEY;
 delete process.env.ANTHROPIC_API_KEY;
@@ -113,13 +114,10 @@ const commands = {
       upstreamUrl: readUpstreamUrl(),
     };
     const stop = new AbortController();
-    let stopSignal: NodeJS.Signals | undefined;
-    const onSignal = (signal: NodeJS.Signals) => {
-      stopSignal = signal;
+    const signals = stopOnSignals(() => {
       console.error("\nStopping. Press ctrl+c again to stop at once.");
       stop.abort();
-    };
-    process.once("SIGINT", onSignal).once("SIGTERM", onSignal);
+    });
     const run = (onRun?: (runId: string) => void) =>
       benchmark.evaluate({ ...options, signal: stop.signal, onRun });
     const fullScreen = !flags.plain && process.stdin.isTTY && process.stdout.isTTY;
@@ -127,7 +125,8 @@ const commands = {
     const evaluation =
       view === undefined ? run() : view.evaluateFullScreen({ ...dirs, scenarios }, run);
     const ok = await evaluation.finally(() => {
-      process.off("SIGINT", onSignal).off("SIGTERM", onSignal);
+      signals.release();
+      const stopSignal = signals.received();
       if (stopSignal !== undefined) process.exit(stopSignal === "SIGINT" ? 130 : 143);
     });
     if (!ok) process.exitCode = 1;
