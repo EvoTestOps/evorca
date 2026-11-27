@@ -325,7 +325,7 @@ describe("Watch", () => {
       expect(row).toMatch(/^(\S+ \S+ {3})*q quit$/);
     }
     for (const row of rows.filter((row) => row.includes("v0."))) {
-      expect(row).toMatch(/^(…\S* +)?evorca v\d+\.\d+\.\d+$/);
+      expect(row).toMatch(/^(\S+ +)?evorca v\d+\.\d+\.\d+$/);
     }
   });
 
