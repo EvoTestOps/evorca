@@ -1,0 +1,1128 @@
+{
+  "runId": "20261118T094052Z-react-1",
+  "benchmark": "openrca",
+  "scenario": "telecom",
+  "series": {
+    "id": "20261118T094052Z-react",
+    "run": 1,
+    "runs": 5
+  },
+  "agent": {
+    "name": "react",
+    "seesCandidates": true,
+    "needsTelemetry": true,
+    "needsModel": true,
+    "timeoutSeconds": 3600,
+    "resources": {
+      "memoryMiB": 3072,
+      "tmpMiB": 1024,
+      "cpus": 2,
+      "pids": 256
+    },
+    "image": "evorca-agent-react:05c0a85526c3",
+    "imageId": "sha256:5556ca0775c8094e8c30136a36a179698fbfa6570dcd10d16a4aad37cff36a69"
+  },
+  "seed": 53588425,
+  "rows": null,
+  "model": {
+    "id": "claude-sonnet-5",
+    "effort": "high",
+    "taskBudgetUsd": 2,
+    "upstreamUrl": "https://api.anthropic.com",
+    "prices": {
+      "table": "anthropic-2026-11-17",
+      "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "checkedAt": "2026-11-17",
+      "usdPerMTok": {
+        "input": 2,
+        "output": 10,
+        "cacheWrite5m": 2.5,
+        "cacheWrite1h": 4,
+        "cacheRead": 0.2
+      }
+    }
+  },
+  "budgetUsd": 50,
+  "jobs": 2,
+  "git": {
+    "commit": "bc31df921bd92beb0f0a0fed627ef1bed01ffbe3",
+    "dirty": true
+  },
+  "pinnedInputs": {
+    "repository": "https://github.com/microsoft/OpenRCA.git",
+    "commit": "2a481ae63cb045c3eadbeca9eddaa10ec1151979",
+    "driveArchives": {
+      "Bank": {
+        "driveId": "1enBrdPT3wLG94ITGbSOwUFg9fkLR-16R",
+        "bytes": 2829139841,
+        "url": "https://drive.usercontent.google.com/download?id=1enBrdPT3wLG94ITGbSOwUFg9fkLR-16R&export=download&confirm=t"
+      },
+      "Telecom": {
+        "driveId": "1cyOKpqyAP4fy-QiJ6a_cKuwR7D46zyVe",
+        "bytes": 3071992930,
+        "url": "https://drive.usercontent.google.com/download?id=1cyOKpqyAP4fy-QiJ6a_cKuwR7D46zyVe&export=download&confirm=t"
+      },
+      "Market": {
+        "driveId": "1aDbqFHhYGgywLDfq54O7Ln8wgiv-BqGJ",
+        "bytes": 2865427796,
+        "url": "https://drive.usercontent.google.com/download?id=1aDbqFHhYGgywLDfq54O7Ln8wgiv-BqGJ&export=download&confirm=t"
+      }
+    },
+    "answerKeySha256": {
+      "Bank/query.csv": "605d3b5c863928caf1611d97858379765858595e150efad2f77d2f733774f588",
+      "Bank/record.csv": "eea788a8c6d07d5d9567067d1e740fe71f3221d8357f0e12e1c643c42cbd15f7",
+      "Telecom/query.csv": "c2726ea18183a05c83dfb22796d20cb7a371ce4db51ce3da3fda3f6e793735b5",
+      "Telecom/record.csv": "a98aa504db6604d6008dc815d3a30babb96caedc199bffcaf70b6677da2f65e2",
+      "Market/cloudbed-1/query.csv": "3512ba2d72648f251e7e01733f079c492a4ff573de557a0223ea538bd9c06742",
+      "Market/cloudbed-1/record.csv": "6246b65915ecaa948037875a149a3d50afdc730371c8b4e3785799995d589324",
+      "Market/cloudbed-2/query.csv": "140300e5edfe287a60944dedeaed08291c298bcc672a070a0630b2835f5a5aee",
+      "Market/cloudbed-2/record.csv": "b12d8c91518cf31e10fdce3ce2e6d38fe259013b73ed9460635022afc12f6162"
+    }
+  },
+  "versions": {
+    "node": "v26.13.1",
+    "docker": {
+      "client": "28.2.2",
+      "server": "28.2.2"
+    }
+  },
+  "startedAt": "2026-11-18T09:40:53.605Z",
+  "resumes": [],
+  "endedAt": "2026-11-18T10:55:50.131Z",
+  "tasks": [
+    {
+      "row": 0,
+      "taskIndex": "task_2",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 71.779,
+      "usage": {
+        "inputTokens": 28,
+        "outputTokens": 4955,
+        "cacheCreation5mInputTokens": 18635,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 148370,
+        "requests": 14,
+        "upstreamErrors": 0,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 62.447,
+        "costUsd": 0.1258675
+      }
+    },
+    {
+      "row": 1,
+      "taskIndex": "task_4",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 120.453,
+      "usage": {
+        "inputTokens": 56,
+        "outputTokens": 9472,
+        "cacheCreation5mInputTokens": 50466,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 691033,
+        "requests": 28,
+        "upstreamErrors": 0,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 108.087,
+        "costUsd": 0.3592036
+      }
+    },
+    {
+      "row": 2,
+      "taskIndex": "task_2",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 94.07,
+      "usage": {
+        "inputTokens": 38,
+        "outputTokens": 7303,
+        "cacheCreation5mInputTokens": 27980,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 306596,
+        "requests": 19,
+        "upstreamErrors": 0,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 81.11,
+        "costUsd": 0.2043752
+      }
+    },
+    {
+      "row": 3,
+      "taskIndex": "task_2",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 140.15,
+      "usage": {
+        "inputTokens": 44,
+        "outputTokens": 11898,
+        "cacheCreation5mInputTokens": 56560,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 596039,
+        "requests": 22,
+        "upstreamErrors": 0,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 131.324,
+        "costUsd": 0.3796758
+      }
+    },
+    {
+      "row": 4,
+      "taskIndex": "task_7",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 97.139,
+      "usage": {
+        "inputTokens": 34,
+        "outputTokens": 7832,
+        "cacheCreation5mInputTokens": 23090,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 282874,
+        "requests": 17,
+        "upstreamErrors": 0,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 83.699,
+        "costUsd": 0.1926878
+      }
+    },
+    {
+      "row": 5,
+      "taskIndex": "task_1",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 79.041,
+      "usage": {
+        "inputTokens": 38,
+        "outputTokens": 6116,
+        "cacheCreation5mInputTokens": 26686,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 285129,
+        "requests": 19,
+        "upstreamErrors": 0,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 66.627,
+        "costUsd": 0.1849768
+      }
+    },
+    {
+      "row": 6,
+      "taskIndex": "task_4",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 78.281,
+      "usage": {
+        "inputTokens": 34,
+        "outputTokens": 5541,
+        "cacheCreation5mInputTokens": 14968,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 194888,
+        "requests": 17,
+        "upstreamErrors": 0,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 64.135,
+        "costUsd": 0.1318756
+      }
+    },
+    {
+      "row": 7,
+      "taskIndex": "task_7",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 91.279,
+      "usage": {
+        "inputTokens": 32,
+        "outputTokens": 7737,
+        "cacheCreation5mInputTokens": 50844,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 462348,
+        "requests": 16,
+        "upstreamErrors": 0,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 81.218,
+        "costUsd": 0.2970136
+      }
+    },
+    {
+      "row": 8,
+      "taskIndex": "task_5",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 246.76,
+      "usage": {
+        "inputTokens": 82,
+        "outputTokens": 18806,
+        "cacheCreation5mInputTokens": 80128,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 1688758,
+        "requests": 41,
+        "upstreamErrors": 0,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 210.193,
+        "costUsd": 0.7262956
+      }
+    },
+    {
+      "row": 9,
+      "taskIndex": "task_1",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 239.142,
+      "usage": {
+        "inputTokens": 48,
+        "outputTokens": 20027,
+        "cacheCreation5mInputTokens": 51623,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 606495,
+        "requests": 24,
+        "upstreamErrors": 0,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 228.027,
+        "costUsd": 0.4507225
+      }
+    },
+    {
+      "row": 10,
+      "taskIndex": "task_1",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 82.706,
+      "usage": {
+        "inputTokens": 28,
+        "outputTokens": 6460,
+        "cacheCreation5mInputTokens": 30778,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 229738,
+        "requests": 14,
+        "upstreamErrors": 0,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 73.73,
+        "costUsd": 0.1875486
+      }
+    },
+    {
+      "row": 11,
+      "taskIndex": "task_6",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 155.538,
+      "usage": {
+        "inputTokens": 54,
+        "outputTokens": 13142,
+        "cacheCreation5mInputTokens": 38850,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 645625,
+        "requests": 27,
+        "upstreamErrors": 0,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 142.653,
+        "costUsd": 0.357778
+      }
+    },
+    {
+      "row": 12,
+      "taskIndex": "task_7",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 110.664,
+      "usage": {
+        "inputTokens": 42,
+        "outputTokens": 8386,
+        "cacheCreation5mInputTokens": 36230,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 496795,
+        "requests": 21,
+        "upstreamErrors": 0,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 97.388,
+        "costUsd": 0.273878
+      }
+    },
+    {
+      "row": 13,
+      "taskIndex": "task_1",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 406.714,
+      "usage": {
+        "inputTokens": 88,
+        "outputTokens": 31806,
+        "cacheCreation5mInputTokens": 116888,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 2404712,
+        "requests": 44,
+        "upstreamErrors": 0,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 368.252,
+        "costUsd": 1.0913984
+      }
+    },
+    {
+      "row": 14,
+      "taskIndex": "task_1",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 147.236,
+      "usage": {
+        "inputTokens": 48,
+        "outputTokens": 11478,
+        "cacheCreation5mInputTokens": 50667,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 521344,
+        "requests": 24,
+        "upstreamErrors": 0,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 126.806,
+        "costUsd": 0.3458123
+      }
+    },
+    {
+      "row": 15,
+      "taskIndex": "task_7",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 167.145,
+      "usage": {
+        "inputTokens": 58,
+        "outputTokens": 14678,
+        "cacheCreation5mInputTokens": 51358,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 784716,
+        "requests": 29,
+        "upstreamErrors": 0,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 151.278,
+        "costUsd": 0.4322342
+      }
+    },
+    {
+      "row": 16,
+      "taskIndex": "task_7",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 58.579,
+      "usage": {
+        "inputTokens": 20,
+        "outputTokens": 3727,
+        "cacheCreation5mInputTokens": 23349,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 134621,
+        "requests": 10,
+        "upstreamErrors": 0,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 49.596,
+        "costUsd": 0.1226067
+      }
+    },
+    {
+      "row": 17,
+      "taskIndex": "task_2",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 177.269,
+      "usage": {
+        "inputTokens": 62,
+        "outputTokens": 12876,
+        "cacheCreation5mInputTokens": 58914,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 973107,
+        "requests": 31,
+        "upstreamErrors": 0,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 149.236,
+        "costUsd": 0.4707904
+      }
+    },
+    {
+      "row": 18,
+      "taskIndex": "task_2",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 201.626,
+      "usage": {
+        "inputTokens": 60,
+        "outputTokens": 16491,
+        "cacheCreation5mInputTokens": 53405,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 856729,
+        "requests": 30,
+        "upstreamErrors": 0,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 177.61,
+        "costUsd": 0.4698883
+      }
+    },
+    {
+      "row": 19,
+      "taskIndex": "task_4",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 301.61,
+      "usage": {
+        "inputTokens": 92,
+        "outputTokens": 22291,
+        "cacheCreation5mInputTokens": 63253,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 1614265,
+        "requests": 46,
+        "upstreamErrors": 0,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 264.488,
+        "costUsd": 0.7040795
+      }
+    },
+    {
+      "row": 20,
+      "taskIndex": "task_2",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 183.422,
+      "usage": {
+        "inputTokens": 58,
+        "outputTokens": 14682,
+        "cacheCreation5mInputTokens": 73872,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 1027381,
+        "requests": 29,
+        "upstreamErrors": 0,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 163.61,
+        "costUsd": 0.5370922
+      }
+    },
+    {
+      "row": 21,
+      "taskIndex": "task_7",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 80.375,
+      "usage": {
+        "inputTokens": 32,
+        "outputTokens": 5560,
+        "cacheCreation5mInputTokens": 20428,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 256021,
+        "requests": 16,
+        "upstreamErrors": 0,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 68.399,
+        "costUsd": 0.1579382
+      }
+    },
+    {
+      "row": 22,
+      "taskIndex": "task_4",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 169.751,
+      "usage": {
+        "inputTokens": 74,
+        "outputTokens": 12812,
+        "cacheCreation5mInputTokens": 56909,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 1137362,
+        "requests": 37,
+        "upstreamErrors": 0,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 147.561,
+        "costUsd": 0.4980129
+      }
+    },
+    {
+      "row": 23,
+      "taskIndex": "task_1",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 184.911,
+      "usage": {
+        "inputTokens": 60,
+        "outputTokens": 14001,
+        "cacheCreation5mInputTokens": 48816,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 893964,
+        "requests": 30,
+        "upstreamErrors": 0,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 161.62,
+        "costUsd": 0.4409628
+      }
+    },
+    {
+      "row": 24,
+      "taskIndex": "task_2",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 95.55,
+      "usage": {
+        "inputTokens": 48,
+        "outputTokens": 7304,
+        "cacheCreation5mInputTokens": 30082,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 514487,
+        "requests": 24,
+        "upstreamErrors": 0,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 79.622,
+        "costUsd": 0.2512384
+      }
+    },
+    {
+      "row": 25,
+      "taskIndex": "task_4",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 124.937,
+      "usage": {
+        "inputTokens": 50,
+        "outputTokens": 8860,
+        "cacheCreation5mInputTokens": 36783,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 603659,
+        "requests": 25,
+        "upstreamErrors": 0,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 110.829,
+        "costUsd": 0.3013893
+      }
+    },
+    {
+      "row": 26,
+      "taskIndex": "task_3",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 147.732,
+      "usage": {
+        "inputTokens": 52,
+        "outputTokens": 11937,
+        "cacheCreation5mInputTokens": 67715,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 881750,
+        "requests": 26,
+        "upstreamErrors": 0,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 133.803,
+        "costUsd": 0.4651115
+      }
+    },
+    {
+      "row": 27,
+      "taskIndex": "task_7",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 261.154,
+      "usage": {
+        "inputTokens": 68,
+        "outputTokens": 19665,
+        "cacheCreation5mInputTokens": 66929,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 1126061,
+        "requests": 34,
+        "upstreamErrors": 0,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 245.014,
+        "costUsd": 0.5893207
+      }
+    },
+    {
+      "row": 28,
+      "taskIndex": "task_7",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 123.021,
+      "usage": {
+        "inputTokens": 48,
+        "outputTokens": 9660,
+        "cacheCreation5mInputTokens": 31380,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 447771,
+        "requests": 24,
+        "upstreamErrors": 0,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 106.497,
+        "costUsd": 0.2647002
+      }
+    },
+    {
+      "row": 29,
+      "taskIndex": "task_4",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 240.816,
+      "usage": {
+        "inputTokens": 62,
+        "outputTokens": 16646,
+        "cacheCreation5mInputTokens": 61932,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 1098196,
+        "requests": 31,
+        "upstreamErrors": 0,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 204.455,
+        "costUsd": 0.5410532
+      }
+    },
+    {
+      "row": 30,
+      "taskIndex": "task_3",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 321.008,
+      "usage": {
+        "inputTokens": 96,
+        "outputTokens": 24266,
+        "cacheCreation5mInputTokens": 84751,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 2194370,
+        "requests": 48,
+        "upstreamErrors": 0,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 275.259,
+        "costUsd": 0.8936035
+      }
+    },
+    {
+      "row": 31,
+      "taskIndex": "task_4",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 56.946,
+      "usage": {
+        "inputTokens": 28,
+        "outputTokens": 4525,
+        "cacheCreation5mInputTokens": 20457,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 161812,
+        "requests": 14,
+        "upstreamErrors": 0,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 52.428,
+        "costUsd": 0.1288109
+      }
+    },
+    {
+      "row": 32,
+      "taskIndex": "task_6",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 98.272,
+      "usage": {
+        "inputTokens": 38,
+        "outputTokens": 8742,
+        "cacheCreation5mInputTokens": 22942,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 296476,
+        "requests": 19,
+        "upstreamErrors": 0,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 91.889,
+        "costUsd": 0.2041462
+      }
+    },
+    {
+      "row": 33,
+      "taskIndex": "task_6",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 94.274,
+      "usage": {
+        "inputTokens": 48,
+        "outputTokens": 6536,
+        "cacheCreation5mInputTokens": 31083,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 423244,
+        "requests": 24,
+        "upstreamErrors": 0,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 82.624,
+        "costUsd": 0.2278123
+      }
+    },
+    {
+      "row": 34,
+      "taskIndex": "task_7",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 138.31,
+      "usage": {
+        "inputTokens": 54,
+        "outputTokens": 10564,
+        "cacheCreation5mInputTokens": 48310,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 798072,
+        "requests": 27,
+        "upstreamErrors": 0,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 124.878,
+        "costUsd": 0.3861374
+      }
+    },
+    {
+      "row": 35,
+      "taskIndex": "task_6",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 148.379,
+      "usage": {
+        "inputTokens": 36,
+        "outputTokens": 11976,
+        "cacheCreation5mInputTokens": 46291,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 415088,
+        "requests": 18,
+        "upstreamErrors": 0,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 134.255,
+        "costUsd": 0.3185771
+      }
+    },
+    {
+      "row": 36,
+      "taskIndex": "task_4",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 208.21,
+      "usage": {
+        "inputTokens": 66,
+        "outputTokens": 15874,
+        "cacheCreation5mInputTokens": 85842,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 1324289,
+        "requests": 33,
+        "upstreamErrors": 0,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 179.689,
+        "costUsd": 0.6383348
+      }
+    },
+    {
+      "row": 37,
+      "taskIndex": "task_2",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 146.078,
+      "usage": {
+        "inputTokens": 52,
+        "outputTokens": 11642,
+        "cacheCreation5mInputTokens": 49243,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 697447,
+        "requests": 26,
+        "upstreamErrors": 0,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 125.413,
+        "costUsd": 0.3791209
+      }
+    },
+    {
+      "row": 38,
+      "taskIndex": "task_2",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 174.303,
+      "usage": {
+        "inputTokens": 64,
+        "outputTokens": 12010,
+        "cacheCreation5mInputTokens": 57819,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 872698,
+        "requests": 32,
+        "upstreamErrors": 0,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 131.634,
+        "costUsd": 0.4393151
+      }
+    },
+    {
+      "row": 39,
+      "taskIndex": "task_3",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 175.245,
+      "usage": {
+        "inputTokens": 66,
+        "outputTokens": 11892,
+        "cacheCreation5mInputTokens": 55721,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 1218084,
+        "requests": 33,
+        "upstreamErrors": 0,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 142.925,
+        "costUsd": 0.5019713
+      }
+    },
+    {
+      "row": 40,
+      "taskIndex": "task_2",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 122.753,
+      "usage": {
+        "inputTokens": 40,
+        "outputTokens": 9677,
+        "cacheCreation5mInputTokens": 34865,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 387399,
+        "requests": 20,
+        "upstreamErrors": 0,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 111.676,
+        "costUsd": 0.2614923
+      }
+    },
+    {
+      "row": 41,
+      "taskIndex": "task_1",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 314.705,
+      "usage": {
+        "inputTokens": 104,
+        "outputTokens": 26462,
+        "cacheCreation5mInputTokens": 109031,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 3270041,
+        "requests": 52,
+        "upstreamErrors": 0,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 290.039,
+        "costUsd": 1.1914137
+      }
+    },
+    {
+      "row": 42,
+      "taskIndex": "task_5",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 430.428,
+      "usage": {
+        "inputTokens": 98,
+        "outputTokens": 36141,
+        "cacheCreation5mInputTokens": 175882,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 4305505,
+        "requests": 49,
+        "upstreamErrors": 0,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 390.768,
+        "costUsd": 1.662412
+      }
+    },
+    {
+      "row": 43,
+      "taskIndex": "task_6",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 495.151,
+      "usage": {
+        "inputTokens": 76,
+        "outputTokens": 36692,
+        "cacheCreation5mInputTokens": 89170,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 1557801,
+        "requests": 38,
+        "upstreamErrors": 0,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 452.141,
+        "costUsd": 0.9015572
+      }
+    },
+    {
+      "row": 44,
+      "taskIndex": "task_5",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 284.98,
+      "usage": {
+        "inputTokens": 94,
+        "outputTokens": 22937,
+        "cacheCreation5mInputTokens": 87133,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 2314374,
+        "requests": 47,
+        "upstreamErrors": 0,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 251.123,
+        "costUsd": 0.9102653
+      }
+    },
+    {
+      "row": 45,
+      "taskIndex": "task_1",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 128.61,
+      "usage": {
+        "inputTokens": 42,
+        "outputTokens": 10929,
+        "cacheCreation5mInputTokens": 32951,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 390207,
+        "requests": 21,
+        "upstreamErrors": 0,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 118.486,
+        "costUsd": 0.2697929
+      }
+    },
+    {
+      "row": 46,
+      "taskIndex": "task_6",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 164.413,
+      "usage": {
+        "inputTokens": 60,
+        "outputTokens": 14708,
+        "cacheCreation5mInputTokens": 52337,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 836813,
+        "requests": 30,
+        "upstreamErrors": 0,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 150.886,
+        "costUsd": 0.4454051
+      }
+    },
+    {
+      "row": 47,
+      "taskIndex": "task_3",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 122.955,
+      "usage": {
+        "inputTokens": 54,
+        "outputTokens": 10010,
+        "cacheCreation5mInputTokens": 40492,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 508327,
+        "requests": 27,
+        "upstreamErrors": 0,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 106.392,
+        "costUsd": 0.3031034
+      }
+    },
+    {
+      "row": 48,
+      "taskIndex": "task_1",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 206.218,
+      "usage": {
+        "inputTokens": 58,
+        "outputTokens": 12363,
+        "cacheCreation5mInputTokens": 51831,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 840046,
+        "requests": 33,
+        "upstreamErrors": 4,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 175.844,
+        "costUsd": 0.4213327
+      }
+    },
+    {
+      "row": 49,
+      "taskIndex": "task_1",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 54.839,
+      "usage": {
+        "inputTokens": 22,
+        "outputTokens": 4380,
+        "cacheCreation5mInputTokens": 22883,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 167243,
+        "requests": 11,
+        "upstreamErrors": 0,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 49.243,
+        "costUsd": 0.1345001
+      }
+    },
+    {
+      "row": 50,
+      "taskIndex": "task_5",
+      "outcome": "answered",
+      "exitCode": 0,
+      "seconds": 252.912,
+      "usage": {
+        "inputTokens": 68,
+        "outputTokens": 17403,
+        "cacheCreation5mInputTokens": 38594,
+        "cacheCreation1hInputTokens": 0,
+        "cacheReadInputTokens": 846854,
+        "requests": 38,
+        "upstreamErrors": 4,
+        "deniedRequests": 0,
+        "budgetExhausted": false,
+        "modelSeconds": 213.125,
+        "costUsd": 0.4400218
+      }
+    }
+  ],
+  "abandoned": [],
+  "usage": {
+    "inputTokens": 2802,
+    "outputTokens": 681878,
+    "cacheCreation5mInputTokens": 2657146,
+    "cacheCreation1hInputTokens": 0,
+    "cacheReadInputTokens": 45737024,
+    "requests": 1409,
+    "upstreamErrors": 8,
+    "deniedRequests": 0,
+    "budgetExhausted": false,
+    "modelSeconds": 7790.031,
+    "costUsd": 22.6146538
+  }
+}
