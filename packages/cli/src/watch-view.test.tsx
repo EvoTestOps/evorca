@@ -4,6 +4,7 @@ import { ManualClock, type TestRendererSetup } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
 import { act } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { agents } from "./agents.js";
 import { noUsage } from "./models.js";
 import type { RunRecord } from "./runs.js";
 import { readRunFolders, type Frame } from "./watch-folder.js";
@@ -31,12 +32,33 @@ const record = runRecord({
   tasks: [taskRecord(0, "answered", 60, 0.5), taskRecord(1, "timeout", 3600, 1.25)],
   usage: { ...noUsage, requests: 2, costUsd: 1.75 },
 });
+const finished = runRecord({
+  runId: "20261127T062559Z-react",
+  rows: Array.from({ length: 51 }, (_, row) => row),
+  tasks: Array.from({ length: 51 }, (_, row) => taskRecord(row, "answered", 125.82, 0.2982)),
+  usage: { ...noUsage, requests: 51, costUsd: 23.84 },
+  endedAt: "2026-11-18T11:00:00.000Z",
+});
+const { jobs: _, ...random } = agents.random;
+const unpriced = runRecord({
+  runId: "20261118T094052Z-random",
+  agent: { name: "random", ...random, image: "evorca-agent-random:abc", imageId: "sha256:2" },
+  model: null,
+  budgetUsd: null,
+  tasks: [{ ...taskRecord(0, "answered", 1.5), usage: null }],
+  usage: null,
+});
 const local = (time: string) =>
   new Date(Date.parse(`2026-11-18T09:${time}.000Z`)).toTimeString().slice(0, 8);
 const lines = (count: number, prefix: string) =>
   Array.from({ length: count }, (_, index) => `${prefix} ${index + 1}`).join("\n");
 
-async function open(run: RunRecord | null = record, height = 40, props: Partial<WatchProps> = {}) {
+async function open(
+  run: RunRecord | null = record,
+  height = 40,
+  props: Partial<WatchProps> = {},
+  width = 120,
+) {
   folder = await runsFolder();
   const dataDir = join(folder.runsDir, "benchmarks");
   await mkdir(join(dataDir, "telecom"), { recursive: true });
@@ -62,7 +84,7 @@ async function open(run: RunRecord | null = record, height = 40, props: Partial<
   onExit = vi.fn();
   const wallTime = () => new Date(Date.parse("2026-11-18T10:10:00.000Z") + clock.now());
   setup = await testRender(<Watch read={read} wallTime={wallTime} onExit={onExit} {...props} />, {
-    width: 120,
+    width,
     height,
     clock,
   });
@@ -280,6 +302,48 @@ describe("Watch", () => {
     expect(frame).not.toContain("Agent random.");
     expect(frame).toContain("ctrl+c stop");
     expect(frame).not.toContain("q quit");
+  });
+
+  it.each([
+    [40, 10],
+    [60, 14],
+    [80, 24],
+    [120, 40],
+  ])("keeps the task line, the keys, and the footer apart at %i by %i", async (width, height) => {
+    await open(finished, height, {}, width);
+    await folder.writeScores(finished, 0.4314, 0.5525);
+    const frame = await poll();
+    const rows = frame.split("\n").map((row) => row.trim());
+
+    expect(rows.every((row) => row.length <= width - 4)).toBe(true);
+    expect(rows.filter((row) => row.includes("task 050"))).toEqual([
+      expect.stringMatching(/^task 050( {3}\S+( \S+)*)* {3,}live {3}tailing$/),
+    ]);
+    for (const row of rows.filter((row) => row.includes("quit"))) {
+      expect(row).toMatch(/^(\S+ \S+ {3})*q quit$/);
+    }
+    for (const row of rows.filter((row) => row.includes("v0."))) {
+      expect(row).toMatch(/^(…\S* +)?evorca v\d+\.\d+\.\d+$/);
+    }
+  });
+
+  it("keeps the keys and the footer on a terminal with room for them", async () => {
+    await open(finished, 24, {}, 80);
+    const frame = await poll();
+
+    expect(frame).toContain("q quit");
+    expect(frame).toMatch(/20261127T062559Z-react +evorca v/);
+  });
+
+  it("shows no cost for a run whose agent calls no model", async () => {
+    await open(unpriced);
+    await folder.startTask(unpriced, 1);
+    const frame = await poll();
+
+    expect(frame).toMatch(/1\/6 tasks +1 answered +30m 0\ds elapsed/);
+    expect(frame).toMatch(/task 001 +task_2 +running/);
+    expect(frame).not.toContain("$");
+    expect(frame).not.toContain("spent");
   });
 
   it("calls onExit on q", async () => {
