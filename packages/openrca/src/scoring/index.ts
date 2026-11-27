@@ -14,4 +14,5 @@ export type { Mismatch, Stage } from "./archive.js";
 export { evaluatorVersions, scoreWithOfficialEvaluator } from "./evaluator.js";
 export type { ScoredRow } from "./evaluator.js";
 export { summarize } from "./summary.js";
-export type { Accuracy, Difficulty, Summary } from "./summary.js";
+export type { Difficulty } from "../tasks.js";
+export type { Accuracy, Summary } from "./summary.js";

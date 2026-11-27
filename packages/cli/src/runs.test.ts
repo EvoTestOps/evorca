@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import { agents } from "./agents.js";
 import {
   conflicts,
+  parseRows,
   runPool,
   tasksToRun,
   writeJson,
@@ -81,6 +82,46 @@ describe("conflicts", () => {
     expect(conflicts(recorded, { model })).toEqual([
       `model: the run has null, not ${JSON.stringify(model)}`,
     ]);
+  });
+});
+
+describe("parseRows", () => {
+  const scenarios = ["bank", "telecom", "market-cloudbed-1"] as const;
+
+  it("gives every scenario the rows of a value without a scenario, in order and without repeats", () => {
+    expect(parseRows(["21,0,7,0"], scenarios)).toEqual(
+      new Map([
+        ["bank", [0, 7, 21]],
+        ["telecom", [0, 7, 21]],
+        ["market-cloudbed-1", [0, 7, 21]],
+      ]),
+    );
+  });
+
+  it("gives a scenario that a value names only those rows, and leaves the others whole", () => {
+    expect(parseRows(["telecom:3,1", "bank:0"], scenarios)).toEqual(
+      new Map([
+        ["telecom", [1, 3]],
+        ["bank", [0]],
+      ]),
+    );
+  });
+
+  it("gives the rows of a value without a scenario to each scenario that no value names", () => {
+    expect(parseRows(["bank:4", "0,7"], scenarios)).toEqual(
+      new Map([
+        ["bank", [4]],
+        ["telecom", [0, 7]],
+        ["market-cloudbed-1", [0, 7]],
+      ]),
+    );
+  });
+
+  it("refuses a value of another form, a scenario outside the run, and rows given twice", () => {
+    for (const values of [["0,,7"], ["telecom:"], ["x"], ["telecom:1", "telecom:2"], ["1", "2"]]) {
+      expect(parseRows(values, scenarios)).toEqual(expect.any(String));
+    }
+    expect(parseRows(["market-cloudbed-2:0"], scenarios)).toContain("market-cloudbed-2");
   });
 });
 

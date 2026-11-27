@@ -17,8 +17,8 @@
 import { relative } from "node:path";
 import { createCliRenderer, type KeyEvent, type ScrollBoxRenderable } from "@opentui/core";
 import { createRoot, useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/react";
-import { memo, useEffect, useRef, useState } from "react";
-import { Footer, gutter, Hints, Mark, palette } from "./shell.js";
+import { memo, useEffect, useRef, useState, type ReactNode } from "react";
+import { Footer, gutter, Hints, Mark, palette } from "./parts.js";
 import { readRunFolders, type Frame, type RunFolders } from "./watch-folder.js";
 import {
   nextRow,
@@ -94,13 +94,16 @@ export async function openWatch(folders: RunFolders): Promise<void> {
  * printed, for a view that runs the run itself. The view shows the last of
  * them, and reads them again each time it draws, about once a second.
  * Without `onExit`, `q` does nothing and the hints name ctrl+c to stop the
- * run instead.
+ * run instead. `children` go above the hints, such as the input line of the
+ * shell. While `keys` is false, the view leaves its keys to them.
  */
 export type WatchProps = {
   readonly read: (selection: Selection) => Promise<Frame>;
   readonly wallTime: () => Date;
   readonly onExit?: (() => void) | undefined;
   readonly log?: (() => readonly string[]) | undefined;
+  readonly keys?: boolean | undefined;
+  readonly children?: ReactNode;
 };
 
 /**
@@ -108,7 +111,14 @@ export type WatchProps = {
  * once when the selection changes, and it goes back to the live task when the
  * run on screen changes. It calls `onExit` on `q`.
  */
-export function Watch({ read, wallTime, onExit, log = () => [] }: WatchProps) {
+export function Watch({
+  read,
+  wallTime,
+  onExit,
+  log = () => [],
+  keys = true,
+  children,
+}: WatchProps) {
   const renderer = useRenderer();
   const { width } = useTerminalDimensions();
   const [selection, setSelection] = useState<Selection>(live);
@@ -161,7 +171,7 @@ export function Watch({ read, wallTime, onExit, log = () => [] }: WatchProps) {
     setTailing(box.scrollTop + box.viewport.height >= box.scrollHeight);
   }
 
-  const keys: Readonly<Record<string, () => void>> = {
+  const actions: Readonly<Record<string, () => void>> = {
     ...(onExit === undefined ? {} : { q: onExit }),
     left: () => pick(nextRow(board, row, -1)),
     right: () => pick(nextRow(board, row, 1)),
@@ -177,7 +187,9 @@ export function Watch({ read, wallTime, onExit, log = () => [] }: WatchProps) {
   };
 
   useKeyboard((key: KeyEvent) => {
-    if (!key.ctrl && !key.meta && Object.hasOwn(keys, key.name)) keys[key.name]?.();
+    if (!keys || key.ctrl || key.meta || !Object.hasOwn(actions, key.name)) return;
+    key.preventDefault();
+    actions[key.name]?.();
   });
 
   const now = wallTime().getTime();
@@ -243,6 +255,7 @@ export function Watch({ read, wallTime, onExit, log = () => [] }: WatchProps) {
             {problem}
           </text>
         )}
+        {children}
         <box border={["top"]} borderColor={palette.border} flexShrink={0} marginTop={1}>
           <Hints
             hints={[...hints, onExit === undefined ? ["ctrl+c", "stop"] : ["q", "quit"]]}

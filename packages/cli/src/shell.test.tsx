@@ -1,10 +1,15 @@
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { RGBA } from "@opentui/core";
 import { ManualClock, type TestRendererSetup } from "@opentui/core/testing";
 import { testRender } from "@opentui/react/test-utils";
 import { act } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import packageJson from "../package.json" with { type: "json" };
-import { palette, Shell } from "./shell.js";
+import { palette } from "./parts.js";
+import { Shell, type Bench } from "./shell.js";
 
 const wordmark = [
   "#####.#...#..###..####...###...###.",
@@ -22,16 +27,21 @@ const secondExample = "Find the root cause of the 5xx burst on payments";
 
 let setup: TestRendererSetup;
 let clock: ManualClock;
-let onExit: () => void;
+let onExit: (lines?: readonly string[], code?: number) => void;
 let wallTime: Date;
+let bench: Bench = {
+  dataDir: "/no/data",
+  runsDir: "/no/runs",
+  evaluate: () => Promise.resolve(true),
+};
 
 async function open(width = 100, height = 30, directory = "~/incidents") {
   clock = new ManualClock();
   onExit = vi.fn();
   wallTime = new Date(2026, 10, 17, 14, 5, 12);
   setup = await testRender(
-    <Shell directory={directory} wallTime={() => wallTime} onExit={onExit} />,
-    { width, height, clock },
+    <Shell directory={directory} wallTime={() => wallTime} bench={bench} onExit={onExit} />,
+    { width, height, clock, exitOnCtrlC: false },
   );
   await setup.renderOnce();
   return setup.captureCharFrame();
@@ -260,7 +270,7 @@ describe("Shell", () => {
 
     expect(frame).toMatch(/^ +14:05:12 +you +hello +$/m);
     expect(frame).toMatch(/^ +09:03:07 +you +\/help +$/m);
-    expect(frame).toMatch(/^ +09:03:07 +evorca +\/help {2}List the commands +$/m);
+    expect(frame).toMatch(/^ +09:03:07 +evorca +\/help +List the commands +$/m);
   });
 
   it("stays home on a blank line", async () => {
@@ -272,15 +282,17 @@ describe("Shell", () => {
     expect(frame).not.toMatch(/ you /);
   });
 
-  it("lists the commands for /help, the second line under the first", async () => {
-    await open();
+  it("lists the commands for /help, each line under the first", async () => {
+    await open(120);
     const lines = (await enter("/help")).split("\n");
-    const first = lines.findIndex((line) => line.includes("/help  List the commands"));
+    const first = lines.findIndex((line) => / \/help +List the commands/.test(line));
+    const commands = lines.slice(first, first + 3);
+    const columns = (pattern: RegExp) => commands.map((line) => line.search(pattern));
 
-    expect(first).toBeGreaterThan(-1);
-    expect(lines[first + 1]?.indexOf("/exit  Exit evorca")).toBe(
-      lines[first]?.indexOf("/help  List the commands"),
-    );
+    expect(commands[1]).toMatch(/ \/benchmark +Pick scenarios, tasks, and an agent, and run them/);
+    expect(commands[2]).toMatch(/ \/exit +Exit evorca/);
+    expect(new Set(columns(/\/\w/)).size).toBe(1);
+    expect(new Set(columns(/(List|Pick|Exit) /)).size).toBe(1);
   });
 
   it("names an unknown command", async () => {
@@ -324,5 +336,220 @@ describe("Shell", () => {
     await act(async () => setup.mockInput.pressCtrlC());
 
     expect(onExit).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("/benchmark", () => {
+  const answerKey = "ANSWER-KEY";
+  const frames: string[] = [];
+  let finish: (ok: boolean) => void;
+  let request: Parameters<Bench["evaluate"]>[0] | undefined;
+
+  afterEach(() => {
+    expect(frames.join("\n")).not.toContain(answerKey);
+    frames.length = 0;
+    request = undefined;
+    return act(() => setup.dispose());
+  });
+
+  async function openWithData() {
+    const root = await mkdtemp(join(tmpdir(), "evorca-shell-"));
+    const query = (indices: readonly string[]) =>
+      [
+        "task_index,instruction,scoring_points",
+        ...indices.map(
+          (index, row) => `${index},Find the cause of failure ${row}.,${answerKey} ${row}`,
+        ),
+      ].join("\n");
+    await mkdir(join(root, "data", "telecom", "telemetry"), { recursive: true });
+    await mkdir(join(root, "data", "bank"), { recursive: true });
+    await writeFile(
+      join(root, "data", "telecom", "query.csv"),
+      query(["task_1", "task_4", "task_7"]),
+    );
+    await writeFile(join(root, "data", "bank", "query.csv"), query(["task_2", "task_6"]));
+    bench = {
+      dataDir: join(root, "data"),
+      runsDir: join(root, "runs"),
+      evaluate: (next) =>
+        new Promise((resolve) => {
+          request = next;
+          console.log(`Running ${next.agent} on ${next.scenarios.join(", ")}.`);
+          next.onRun("20261118T120000Z-random");
+          finish = (ok) => {
+            if (ok) console.log("telecom: 2 answered");
+            resolve(ok);
+          };
+          next.signal.addEventListener("abort", () => {
+            console.error(
+              "Stopped. Resume with: pnpm evorca evaluate --resume=20261118T120000Z-random",
+            );
+          });
+        }),
+    };
+    await open(120, 30);
+  }
+
+  async function show(): Promise<string> {
+    await setup.renderOnce();
+    const frame = setup.captureCharFrame();
+    frames.push(frame);
+    return frame;
+  }
+
+  async function until(text: string): Promise<string> {
+    for (let tries = 0; tries < 100; tries++) {
+      await act(() => sleep(10));
+      const frame = await show();
+      if (frame.includes(text)) return frame;
+    }
+    throw new Error(`No frame showed ${text}:\n${setup.captureCharFrame()}`);
+  }
+
+  async function keys(...names: string[]): Promise<string> {
+    for (const name of names) {
+      await act(async () => {
+        if (name === "enter") setup.mockInput.pressEnter();
+        else if (name === "escape") {
+          setup.mockInput.pressEscape();
+          clock.setTime(clock.now() + 100);
+        } else if (name === "ctrl+c") setup.mockInput.pressCtrlC();
+        else if (name === "up" || name === "down" || name === "left" || name === "right") {
+          setup.mockInput.pressArrow(name);
+        } else await setup.mockInput.typeText(name);
+      });
+    }
+    await act(() => sleep(20));
+    return show();
+  }
+
+  async function confirmRun() {
+    await openWithData();
+    await enter("/benchmark");
+    await until("Scenarios");
+    await keys(" ", "down", " ", "enter");
+    await keys("down", "down", "down", "down", "h", "enter");
+    await keys("down", "right", "enter");
+    return show();
+  }
+
+  it("lists each scenario with its tasks and telemetry, and how to fetch one without tasks", async () => {
+    await openWithData();
+    await enter("/benchmark");
+    const frame = await until("Scenarios");
+
+    expect(frame).toMatch(/› • bank +2 tasks, no telemetry/);
+    expect(frame).toMatch(/ • telecom +3 tasks, with telemetry/);
+    expect(frame).toMatch(
+      / × market-cloudbed-1 +Fetch its tasks with pnpm evorca fetch --benchmark=openrca --scenario=market-cloudbed-1 *\n/,
+    );
+  });
+
+  it("shows each task's row, task index, difficulty, and instruction, and drops a difficulty", async () => {
+    await openWithData();
+    await enter("/benchmark");
+    await until("Scenarios");
+    await keys(" ", "down", " ", "enter");
+    const tasks = await keys("down", "down", "down", "down");
+    const hardDropped = await keys("h");
+
+    expect(tasks).toMatch(/ • telecom +3 of 3 tasks/);
+    expect(tasks).toMatch(/› • +000 +task_1 +easy +Find the cause of failure 0\./);
+    expect(tasks).toMatch(/ • +002 +task_7 +hard +Find the cause of failure 2\./);
+    expect(hardDropped).toMatch(/ • telecom +2 of 3 tasks/);
+  });
+
+  it("confirms with the command that repeats the pick", async () => {
+    const frame = await confirmRun();
+
+    expect(frame).toMatch(/tasks +4 per run: bank 2 of 2, telecom 2 of 3/);
+    expect(frame).toMatch(/agent +random, 2 runs, seed \d+/);
+    expect(frame.replaceAll(/ \\ *\n +/g, " ")).toMatch(
+      /command +EVORCA_SEED=\d+ pnpm evorca evaluate --benchmark=openrca --agent=random --scenario=bank --scenario=telecom --rows=telecom:0,1 --runs=2 *\n/,
+    );
+  });
+
+  it("runs the pick in the view of a run, then logs the command and what the run printed", async () => {
+    await confirmRun();
+    const running = await keys("enter");
+
+    expect(request).toMatchObject({
+      agent: "random",
+      scenarios: ["bank", "telecom"],
+      rows: new Map([["telecom", [0, 1]]]),
+      runs: 2,
+      model: undefined,
+    });
+    expect(running).toContain("Running random on bank, telecom.");
+    expect(running).toContain("ctrl+c stop");
+
+    await act(async () => finish(true));
+    const logged = await until("telecom: 2 answered");
+    const help = await enter("/help");
+
+    expect(logged).toMatch(/evorca +Running the evaluation that this command repeats:/);
+    expect(logged).toMatch(/evorca +Running random on bank, telecom\./);
+    expect(help).toMatch(/\/help +List the commands/);
+    expect(onExit).not.toHaveBeenCalled();
+  });
+
+  it("stops the run on ctrl+c, and leaves at once on a second ctrl+c", async () => {
+    await confirmRun();
+    await keys("enter");
+    const stopping = await keys("ctrl+c");
+
+    expect(request?.signal.aborted).toBe(true);
+    expect(stopping).toContain("Stopping. Press ctrl+c again to stop at once.");
+    expect(onExit).not.toHaveBeenCalled();
+
+    await keys("ctrl+c");
+
+    expect(onExit).toHaveBeenCalledWith(
+      expect.arrayContaining(["Running random on bank, telecom."]),
+      130,
+    );
+  });
+
+  it("logs the stop and goes back to the session once the run has stopped", async () => {
+    await confirmRun();
+    await keys("enter", "ctrl+c");
+    await act(async () => finish(false));
+    const logged = await until("Stopped. Resume with");
+
+    expect(logged).toMatch(/evorca +Stopping\. Press ctrl\+c again to stop at once\./);
+    expect(onExit).not.toHaveBeenCalled();
+  });
+
+  it("asks before /exit stops a run, then leaves once the run has stopped", async () => {
+    await confirmRun();
+    await keys("enter");
+    const asked = await enter("/exit");
+    frames.push(asked);
+
+    expect(asked).toContain("Type /exit again to stop it and leave evorca.");
+    expect(request?.signal.aborted).toBe(false);
+
+    await enter("/exit");
+
+    expect(request?.signal.aborted).toBe(true);
+    expect(onExit).not.toHaveBeenCalled();
+
+    await act(async () => finish(false));
+
+    expect(onExit).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        "› /exit",
+        "Stopped. Resume with: pnpm evorca evaluate --resume=20261118T120000Z-random",
+      ]),
+    );
+  });
+
+  it("goes back to the session when the picker closes", async () => {
+    await openWithData();
+    await enter("/benchmark");
+    await until("Scenarios");
+    const frame = await keys("escape");
+
+    expect(frame).toMatch(/evorca +No run started\./);
   });
 });
