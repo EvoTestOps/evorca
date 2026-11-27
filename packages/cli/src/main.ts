@@ -13,9 +13,12 @@
  * that copy on disk instead of downloading them.
  * `evorca evaluate` runs an agent from `agents/` on those scenarios, one Docker
  * container per task, scores its answers, and keeps each run in
- * `data/runs/<benchmark>/<scenario>/`. `evorca report` prints the summary of
- * finished runs from those folders. `evorca watch` shows a run full screen
- * while it runs, from its folder, and follows the newest run without a run ID.
+ * `data/runs/<benchmark>/<scenario>/`. In a terminal, it shows the run in the
+ * view of `evorca watch` unless `--plain` asks for lines. On SIGINT or
+ * SIGTERM, it stops the run and exits with 130 or 143. `evorca report` prints
+ * the summary of finished runs from those folders. `evorca watch` shows a run
+ * full screen while it runs, from its folder, and follows the newest run
+ * without a run ID.
  *
  * The command takes the real API key from `ANTHROPIC_API_KEY` and then deletes
  * the variable, so no Docker command, container, or evaluator that it starts
@@ -106,7 +109,25 @@ const commands = {
       apiKey,
       upstreamUrl: readUpstreamUrl(),
     };
-    if (!(await benchmark.evaluate(options))) process.exitCode = 1;
+    const stop = new AbortController();
+    let stopSignal: NodeJS.Signals | undefined;
+    const onSignal = (signal: NodeJS.Signals) => {
+      stopSignal = signal;
+      console.error("\nStopping. Press ctrl+c again to stop at once.");
+      stop.abort();
+    };
+    process.once("SIGINT", onSignal).once("SIGTERM", onSignal);
+    const run = (onRun?: (runId: string) => void) =>
+      benchmark.evaluate({ ...options, signal: stop.signal, onRun });
+    const fullScreen = !flags.plain && process.stdin.isTTY && process.stdout.isTTY;
+    const view = fullScreen ? await import("./evaluate-view.js") : undefined;
+    const evaluation =
+      view === undefined ? run() : view.evaluateFullScreen({ ...dirs, scenarios }, run);
+    const ok = await evaluation.finally(() => {
+      process.off("SIGINT", onSignal).off("SIGTERM", onSignal);
+      if (stopSignal !== undefined) process.exit(stopSignal === "SIGINT" ? 130 : 143);
+    });
+    if (!ok) process.exitCode = 1;
   },
   async report({ benchmark, scenarios, runIds, runsDir }: Invocation) {
     if (!(await benchmark.report({ scenarios, runIds, runsDir }))) process.exitCode = 1;
@@ -135,8 +156,9 @@ const usage = [
   "       evorca evaluate --benchmark=<benchmark> --agent=<agent> [--scenario=<scenario>...]",
   "                [--runs=<count>] [--rows=<row>,...] [--jobs=<count>] [--model=<model>]",
   "                [--effort=<effort>] [--budget-usd=<dollars>] [--task-budget-usd=<dollars>]",
+  "                [--plain]",
   "       evorca evaluate --benchmark=<benchmark> --resume=<run id> [--scenario=<scenario>...]",
-  "                [--jobs=<count>] [--budget-usd=<dollars>]",
+  "                [--jobs=<count>] [--budget-usd=<dollars>] [--plain]",
   "       evorca report --benchmark=<benchmark> [--scenario=<scenario>...] <run id>...",
   "       evorca watch --benchmark=<benchmark> [--scenario=<scenario>...] [<run id>]",
 ].join("\n");
@@ -198,6 +220,7 @@ type Flags = {
   readonly effort?: string | undefined;
   readonly "budget-usd"?: string | undefined;
   readonly "task-budget-usd"?: string | undefined;
+  readonly plain?: boolean | undefined;
 };
 
 function parseCommandLine() {
@@ -217,6 +240,7 @@ function parseCommandLine() {
         effort: { type: "string" },
         "budget-usd": { type: "string" },
         "task-budget-usd": { type: "string" },
+        plain: { type: "boolean" },
       },
     });
   } catch (error: unknown) {

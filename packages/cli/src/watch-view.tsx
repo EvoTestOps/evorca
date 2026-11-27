@@ -47,8 +47,8 @@ const hints = [
   ["←→", "task"],
   ["tab", "running"],
   ["f", "live"],
-  ["q", "quit"],
 ] as const;
+const logLines = 4;
 const looks = {
   pending: { glyph: dot, ink: palette.border },
   running: { glyph: dot, ink: palette.bright },
@@ -90,12 +90,17 @@ export async function openWatch(folders: RunFolders): Promise<void> {
 /**
  * The props of {@link Watch}. `read` reads the run and the trajectory of the
  * task that a selection picks, and `wallTime` returns the time to measure
- * the elapsed time against.
+ * the elapsed time against. `log` returns the lines that the runner has
+ * printed, for a view that runs the run itself. The view shows the last of
+ * them, and reads them again each time it draws, about once a second.
+ * Without `onExit`, `q` does nothing and the hints name ctrl+c to stop the
+ * run instead.
  */
 export type WatchProps = {
   readonly read: (selection: Selection) => Promise<Frame>;
   readonly wallTime: () => Date;
-  readonly onExit: () => void;
+  readonly onExit?: (() => void) | undefined;
+  readonly log?: (() => readonly string[]) | undefined;
 };
 
 /**
@@ -103,7 +108,7 @@ export type WatchProps = {
  * once when the selection changes, and it goes back to the live task when the
  * run on screen changes. It calls `onExit` on `q`.
  */
-export function Watch({ read, wallTime, onExit }: WatchProps) {
+export function Watch({ read, wallTime, onExit, log = () => [] }: WatchProps) {
   const renderer = useRenderer();
   const { width } = useTerminalDimensions();
   const [selection, setSelection] = useState<Selection>(live);
@@ -157,7 +162,7 @@ export function Watch({ read, wallTime, onExit }: WatchProps) {
   }
 
   const keys: Readonly<Record<string, () => void>> = {
-    q: onExit,
+    ...(onExit === undefined ? {} : { q: onExit }),
     left: () => pick(nextRow(board, row, -1)),
     right: () => pick(nextRow(board, row, 1)),
     tab: () => pick(nextRunning(board, row)),
@@ -178,6 +183,9 @@ export function Watch({ read, wallTime, onExit }: WatchProps) {
   const now = wallTime().getTime();
   const task = board.find((task) => task.row === row);
   const running = task?.state.kind === "running";
+  const logTail = log()
+    .filter((line) => line.trim() !== "")
+    .slice(-logLines);
   const lastTurn =
     frame.kind === "run" ? frame.feed.findLastIndex(({ kind }) => kind === "turn") : -1;
   return (
@@ -221,13 +229,25 @@ export function Watch({ read, wallTime, onExit }: WatchProps) {
             </scrollbox>
           </>
         )}
+        {logTail.length === 0 ? null : (
+          <box flexDirection="column" flexShrink={0} marginTop={1}>
+            {logTail.map((line, index) => (
+              <text key={index} fg={palette.muted} wrapMode="none">
+                {line}
+              </text>
+            ))}
+          </box>
+        )}
         {problem === undefined ? null : (
           <text fg={palette.muted} flexShrink={0}>
             {problem}
           </text>
         )}
         <box border={["top"]} borderColor={palette.border} flexShrink={0} marginTop={1}>
-          <Hints hints={hints} width={width - 2 * gutter} />
+          <Hints
+            hints={[...hints, onExit === undefined ? ["ctrl+c", "stop"] : ["q", "quit"]]}
+            width={width - 2 * gutter}
+          />
         </box>
       </box>
       <Footer
